@@ -55,6 +55,10 @@ if [ -z "$ACTUAL_OUTPUT" ]; then
     exit 1
 fi
 
+# Count lines in expected and actual output files
+EXPECTED_LINES=$(wc -l < "$EXPECTED_OUTPUT")
+ACTUAL_LINES=$(wc -l < "$ACTUAL_OUTPUT")
+
 # Check if test1.c appears before test1.h in the output file
 if grep -A 1 "test1.c" "$ACTUAL_OUTPUT" | grep -q "This is a C file" && \
    grep -A 1 "test1.h" "$ACTUAL_OUTPUT" | grep -q "This is a header file"; then
@@ -63,8 +67,19 @@ if grep -A 1 "test1.c" "$ACTUAL_OUTPUT" | grep -q "This is a C file" && \
     H_LINE=$(grep -n "test1.h" "$ACTUAL_OUTPUT" | cut -d':' -f1)
     
     if [ "$C_LINE" -lt "$H_LINE" ]; then
-        echo "Basic test passed: Files appear in correct order"
-        exit 0
+        # Check if line counts match
+        if [ "$EXPECTED_LINES" -eq "$ACTUAL_LINES" ]; then
+            echo "Basic test passed: Files appear in correct order and line counts match"
+            exit 0
+        else
+            echo "FAILED: Line count mismatch"
+            echo "Expected $EXPECTED_LINES lines, got $ACTUAL_LINES lines"
+            echo "==== EXPECTED OUTPUT ===="
+            cat "$EXPECTED_OUTPUT"
+            echo "==== ACTUAL OUTPUT ===="
+            cat "$ACTUAL_OUTPUT"
+            exit 1
+        fi
     else
         echo "FAILED: Basic test - Files appear in wrong order"
         echo "test1.c should appear before test1.h"
