@@ -40,7 +40,7 @@ TOTAL_TESTS=0
 PASSED_TESTS=0
 
 # Run each test and collect results
-for test_script in test_basic.sh test_recursive.sh test_file_types.sh test_name_pattern.sh test_dotfiles.sh; do
+for test_script in test_basic.sh test_recursive.sh test_file_types.sh test_name_pattern.sh test_dotfiles.sh test_verbose_quiet.sh; do
     if [ -f "./tests/$test_script" ]; then
         echo -e "\nRunning $test_script..."
         chmod +x ./tests/$test_script
