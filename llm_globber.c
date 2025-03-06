@@ -67,6 +67,7 @@ int init_config(ScrapeConfig *config);
 int sanitize_path(char *path, size_t max_len);
 size_t get_file_size(FILE *file);
 int is_binary_file(const char *path);
+int is_dot_file(const char *file_path);
 int process_file(FILE *output, const char *file_path, int detect_binary);
 
 // Safe logging function
@@ -391,6 +392,18 @@ int clean_up_text(const char *filename, int max_consecutive_newlines) {
     return 1;
 }
 
+// Check if a file is a dot file (starts with a dot)
+int is_dot_file(const char *file_path) {
+    if (!file_path) return 0;
+    
+    char *path_copy = safe_strdup(file_path);
+    char *base_name = basename(path_copy);
+    int result = (base_name[0] == '.');
+    free(path_copy);
+    
+    return result;
+}
+
 // Process a file and write its contents to the output file
 int process_file(FILE *output, const char *file_path, int detect_binary) {
     if (!output || !file_path) return 0;
@@ -398,6 +411,11 @@ int process_file(FILE *output, const char *file_path, int detect_binary) {
     // Get file basename for the header
     char *path_copy = safe_strdup(file_path);
     char *base_name = basename(path_copy);
+    
+    // Check if this is a dot file and warn the user
+    if (base_name[0] == '.') {
+        log_message(LOG_WARN, "WARNING: Including dot file which may contain secrets: %s", file_path);
+    }
     
     fprintf(output, "\n'''--- %s ---\n", base_name);
     free(path_copy);

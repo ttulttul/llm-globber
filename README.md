@@ -72,6 +72,7 @@ llm_globber -o output -n important_files file1.c file2.h file3.txt
 
 - Path sanitization to prevent directory traversal attacks
 - Binary file detection with automatic handling
+- Dot file warnings to prevent accidental inclusion of sensitive configuration files
 - Secure memory management with checks on all allocation paths
 - Proper error handling and reporting
 - Secure file permissions for output files
