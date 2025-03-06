@@ -1782,10 +1782,11 @@ int main(int argc, char *argv[]) {
     }
     
     // Sort files by size (largest first) for better thread utilization
-if (config.file_entry_count > 1 && config.num_threads > 1) {
-    qsort(config.file_entries, config.file_entry_count, sizeof(FileEntry),
-          compare_file_entries_by_size);
-}
+    // Only sort if using multiple threads, otherwise preserve input order
+    if (config.file_entry_count > 1 && config.num_threads > 1) {
+        qsort(config.file_entries, config.file_entry_count, sizeof(FileEntry),
+              compare_file_entries_by_size);
+    }
     
     // Run the scraper
     char *output_file = run_scraper(&config);
