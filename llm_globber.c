@@ -122,7 +122,7 @@ typedef struct ScrapeConfig {
 
 // Global variables
 static volatile int g_interrupted = 0;  // Signal interrupt flag
-static LogLevel g_log_level = LOG_INFO; // Global logging level
+static LogLevel g_log_level = LOG_WARN; // Global logging level (default to warnings only)
 static int g_quiet_mode = 0;            // Global quiet mode flag
 static pthread_mutex_t g_log_mutex = PTHREAD_MUTEX_INITIALIZER; // Mutex for logging
 
@@ -1715,7 +1715,7 @@ int main(int argc, char *argv[]) {
         if (config.verbose) {
             g_log_level = LOG_DEBUG;
         } else {
-            g_log_level = LOG_INFO;
+            g_log_level = LOG_WARN; // Default to warnings only
         }
     }
     
