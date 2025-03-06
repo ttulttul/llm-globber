@@ -29,8 +29,8 @@ for file in $C_FILES; do
     echo "'''" >> $EXPECTED_OUTPUT
 done
 
-# Run llm_globber with recursive option
-./llm_globber -o test_output -n recursive_test -t .c -r $TEST_DIR
+# Run llm_globber with recursive option and absolute path
+./llm_globber -o $(pwd)/test_output -n recursive_test -t .c -r $TEST_DIR
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/recursive_test_*.txt | head -1)

@@ -26,8 +26,8 @@ cat test_files/test1.h >> $EXPECTED_OUTPUT
 echo "" >> $EXPECTED_OUTPUT
 echo "'''" >> $EXPECTED_OUTPUT
 
-# Run llm_globber
-./llm_globber -o test_output -n basic_test $TEST_FILES
+# Run llm_globber with absolute path to ensure it works
+./llm_globber -o $(pwd)/test_output -n basic_test $TEST_FILES
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/basic_test_*.txt | head -1)

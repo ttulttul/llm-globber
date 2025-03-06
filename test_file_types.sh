@@ -29,8 +29,8 @@ for file in $H_FILES; do
     echo "'''" >> $EXPECTED_OUTPUT
 done
 
-# Run llm_globber with file type filter
-./llm_globber -o test_output -n file_types_test -t .h $TEST_DIR
+# Run llm_globber with file type filter and absolute path
+./llm_globber -o $(pwd)/test_output -n file_types_test -t .h $TEST_DIR
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/file_types_test_*.txt | head -1)
