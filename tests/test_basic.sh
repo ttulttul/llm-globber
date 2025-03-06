@@ -32,8 +32,9 @@ echo "Using output directory: $OUTPUT_DIR"
 # Ensure the directory exists
 mkdir -p "$OUTPUT_DIR"
 # Run with explicit paths to each test file
-echo "Running: ../llm_globber -o $OUTPUT_DIR -n basic_test $(pwd)/test_files/test1.c $(pwd)/test_files/test1.h"
-../llm_globber -o "$OUTPUT_DIR" -n basic_test "$(pwd)/test_files/test1.c" "$(pwd)/test_files/test1.h"
+# Use -u flag to disable sandbox mode for testing
+echo "Running: ../llm_globber -o $OUTPUT_DIR -n basic_test -u $(pwd)/test_files/test1.c $(pwd)/test_files/test1.h"
+../llm_globber -o "$OUTPUT_DIR" -n basic_test -u "$(pwd)/test_files/test1.c" "$(pwd)/test_files/test1.h"
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/basic_test_*.txt | head -1)

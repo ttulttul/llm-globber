@@ -31,7 +31,8 @@ done
 
 # Run llm_globber with name pattern filter
 OUTPUT_DIR="$(pwd)/test_output"
-../llm_globber -o "$OUTPUT_DIR" -n name_pattern_test -name "test*.c" -r $TEST_DIR
+# Use -u flag to disable sandbox mode for testing
+../llm_globber -o "$OUTPUT_DIR" -n name_pattern_test -name "test*.c" -r -u $TEST_DIR
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/name_pattern_test_*.txt | head -1)
