@@ -32,7 +32,10 @@ done
 # Run llm_globber with file type filter and absolute path
 OUTPUT_DIR="$(pwd)/test_output"
 echo "Using output directory: $OUTPUT_DIR"
-./llm_globber -o "$OUTPUT_DIR" -n file_types_test -t .h $TEST_DIR
+# Ensure the directory exists
+mkdir -p "$OUTPUT_DIR"
+# Run with absolute path to test directory
+./llm_globber -o "$OUTPUT_DIR" -n file_types_test -t .h "$(pwd)/$TEST_DIR"
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/file_types_test_*.txt | head -1)

@@ -225,7 +225,14 @@ char* run_scraper(ScrapeConfig *config) {
     printf("Fetching all files...\n");
     
     // Create output directory if it doesn't exist
-    mkdir(config->output_path, 0755);
+    struct stat st = {0};
+    if (stat(config->output_path, &st) == -1) {
+        if (mkdir(config->output_path, 0755) != 0) {
+            printf("Error: Could not create output directory: %s (%s)\n", 
+                   config->output_path, strerror(errno));
+            return NULL;
+        }
+    }
     
     // Generate timestamp
     time_t now = time(NULL);
@@ -396,6 +403,18 @@ int main(int argc, char *argv[]) {
     
     // Debug output
     printf("Debug: Output path set to: '%s'\n", config.output_path);
+    
+    // Ensure output path exists
+    struct stat st = {0};
+    if (stat(config.output_path, &st) == -1) {
+        // Directory doesn't exist, try to create it
+        if (mkdir(config.output_path, 0755) != 0) {
+            printf("Error: Could not create output directory: %s (%s)\n", 
+                   config.output_path, strerror(errno));
+            return 1;
+        }
+        printf("Created output directory: %s\n", config.output_path);
+    }
     
     if (strlen(config.output_filename) == 0) {
         printf("Error: Output filename (-n) is required\n");
