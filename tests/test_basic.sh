@@ -51,7 +51,7 @@ if [ "$EXPECTED_CONTENT" = "$ACTUAL_CONTENT" ]; then
     echo "Basic test passed: Content matches expected output"
     exit 0
 else
-    echo "Basic test failed: Content does not match expected output"
+    echo "FAILED: Basic test - Content does not match expected output"
     echo "Expected content (without filenames):"
     echo "$EXPECTED_CONTENT"
     echo "Actual content (without filenames):"

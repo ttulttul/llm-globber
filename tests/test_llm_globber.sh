@@ -69,6 +69,6 @@ if [ $PASSED_TESTS -eq $TOTAL_TESTS ]; then
     echo -e "\n${GREEN}All tests passed!${NC}"
     exit 0
 else
-    echo -e "\n${RED}Some tests failed.${NC}"
+    echo -e "\n${RED}Some tests failed. See individual test output above for details.${NC}"
     exit 1
 fi

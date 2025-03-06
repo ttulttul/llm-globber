@@ -58,11 +58,11 @@ if [ "$EXPECTED_FILE_COUNT" = "$ACTUAL_FILE_COUNT" ]; then
         echo "File types test passed: Found $ACTUAL_FILE_COUNT .h files as expected"
         exit 0
     else
-        echo "File types test failed: Found non-.h files in the output"
+        echo "FAILED: File types test - Found non-.h files in the output"
         echo "$NON_H_FILES"
         exit 1
     fi
 else
-    echo "File types test failed: Expected $EXPECTED_FILE_COUNT .h files, but found $ACTUAL_FILE_COUNT"
+    echo "FAILED: File types test - Expected $EXPECTED_FILE_COUNT .h files, but found $ACTUAL_FILE_COUNT"
     exit 1
 fi

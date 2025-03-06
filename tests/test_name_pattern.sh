@@ -53,12 +53,12 @@ if [ "$EXPECTED_FILE_COUNT" = "$ACTUAL_FILE_COUNT" ]; then
         echo "Name pattern test passed: Found $ACTUAL_FILE_COUNT matching files as expected"
         exit 0
     else
-        echo "Name pattern test failed: Found files not matching the pattern"
+        echo "FAILED: Name pattern test - Found files not matching the pattern"
         echo "$NON_MATCHING_FILES"
         exit 1
     fi
 else
-    echo "Name pattern test failed: Expected $EXPECTED_FILE_COUNT matching files, but found $ACTUAL_FILE_COUNT"
+    echo "FAILED: Name pattern test - Expected $EXPECTED_FILE_COUNT matching files, but found $ACTUAL_FILE_COUNT"
     echo "Expected files:"
     grep "^'''\-\-\-" $EXPECTED_OUTPUT
     echo "Actual files:"

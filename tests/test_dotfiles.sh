@@ -32,7 +32,7 @@ if echo "$OUTPUT" | grep -q "WARNING: Including dot file"; then
     echo "✓ Dotfile warning detected"
     WARNING_TEST_PASSED=true
 else
-    echo "✗ No dotfile warning detected"
+    echo "✗ FAILED: No dotfile warning detected"
     WARNING_TEST_PASSED=false
 fi
 
@@ -55,7 +55,7 @@ if [ "$DOTFILE_COUNT" -eq 1 ] && [ "$CONFIG_COUNT" -eq 1 ]; then
     echo "✓ Dotfiles correctly included in output"
     CONTENT_TEST_PASSED=true
 else
-    echo "✗ Dotfiles not correctly included in output"
+    echo "✗ FAILED: Dotfiles not correctly included in output"
     echo "Dotfile count: $DOTFILE_COUNT, Config count: $CONFIG_COUNT"
     CONTENT_TEST_PASSED=false
 fi

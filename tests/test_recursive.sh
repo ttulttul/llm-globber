@@ -54,7 +54,7 @@ if [ "$EXPECTED_FILE_COUNT" = "$ACTUAL_FILE_COUNT" ]; then
     echo "Recursive test passed: Found $ACTUAL_FILE_COUNT files as expected"
     exit 0
 else
-    echo "Recursive test failed: Expected $EXPECTED_FILE_COUNT files, but found $ACTUAL_FILE_COUNT"
+    echo "FAILED: Recursive test - Expected $EXPECTED_FILE_COUNT files, but found $ACTUAL_FILE_COUNT"
     echo "Expected files:"
     grep "^'''\-\-\-" $EXPECTED_OUTPUT
     echo "Actual files:"

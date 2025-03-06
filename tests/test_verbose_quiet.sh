@@ -24,7 +24,7 @@ if grep -q "INFO:" verbose_output.txt; then
   echo "✓ Verbose mode shows INFO messages"
   INFO_TEST_PASSED=true
 else
-  echo "✗ Verbose mode should show INFO messages"
+  echo "✗ FAILED: Verbose mode should show INFO messages"
   cat verbose_output.txt
   INFO_TEST_PASSED=false
 fi
@@ -35,7 +35,7 @@ echo "Testing quiet mode..."
 
 # Check if quiet mode suppresses all output
 if [ -s quiet_output.txt ]; then
-  echo "✗ Quiet mode should not produce any output"
+  echo "✗ FAILED: Quiet mode should not produce any output"
   cat quiet_output.txt
   QUIET_TEST_PASSED=false
 else
@@ -50,11 +50,11 @@ echo "Testing default mode..."
 # Check if default mode shows only warnings and errors
 DEFAULT_TEST_PASSED=true
 if grep -q "INFO:" default_output.txt; then
-  echo "✗ Default mode should not show INFO messages"
+  echo "✗ FAILED: Default mode should not show INFO messages"
   DEFAULT_TEST_PASSED=false
 fi
 if grep -q "DEBUG:" default_output.txt; then
-  echo "✗ Default mode should not show DEBUG messages"
+  echo "✗ FAILED: Default mode should not show DEBUG messages"
   DEFAULT_TEST_PASSED=false
 fi
 if [ "$DEFAULT_TEST_PASSED" = true ]; then
