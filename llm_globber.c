@@ -1560,8 +1560,8 @@ int main(int argc, char *argv[]) {
         }
     } else {
         log_message(LOG_INFO, "Scraper completed successfully: %s", output_file);
-        // Debug dump the output file for testing, but not in quiet mode
-        if (!config.quiet) {
+        // Debug dump the output file for testing, but only in verbose mode
+        if (config.verbose) {
             debug_dump_file(output_file);
         }
         free(output_file);
