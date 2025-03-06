@@ -62,6 +62,13 @@ ACTUAL_LINES=$(wc -l < "$ACTUAL_OUTPUT")
 echo "EXPECTED_LINES=$EXPECTED_LINES"
 echo "ACTUAL_LINES  =$ACTUAL_LINES"
 
+# Debug: show file contents
+echo "=== EXPECTED OUTPUT ==="
+cat "$EXPECTED_OUTPUT"
+echo "=== ACTUAL OUTPUT ==="
+cat "$ACTUAL_OUTPUT"
+echo "=== END DEBUG ==="
+
 # Check if test1.c appears before test1.h in the output file
 if grep -A 1 "test_files/test1.c" "$ACTUAL_OUTPUT" | grep -q "This is a C file" && \
    grep -A 1 "test_files/test1.h" "$ACTUAL_OUTPUT" | grep -q "This is a header file"; then

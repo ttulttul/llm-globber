@@ -155,6 +155,7 @@ void strip_trailing_slash(char *path);
 char* get_absolute_path(const char *path);
 int validate_utf8(const char *str, size_t len);
 void print_header(const char *msg);
+void debug_dump_file(const char *filename);
 
 
 // Signal handler for clean termination
@@ -965,7 +966,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
                 }
             }
         }
-        fprintf(config->output_file, "\n'''\n"); // Add closing marker
+        fprintf(config->output_file, "\n'''\n"); // Add closing marker with newline
     }
 
     // Unlock the mutex
@@ -1117,6 +1118,23 @@ void print_header(const char *msg) {
     printf("\n%s\n", msg);
     for (int i = 0; i < 80; i++) printf("=");
     printf("\n");
+}
+
+// Debug function to dump file contents
+void debug_dump_file(const char *filename) {
+    FILE *f = fopen(filename, "r");
+    if (!f) {
+        fprintf(stderr, "Cannot open %s for debug: %s\n", filename, strerror(errno));
+        return;
+    }
+    
+    fprintf(stderr, "=== DEBUG DUMP of %s ===\n", filename);
+    char buffer[1024];
+    while (fgets(buffer, sizeof(buffer), f)) {
+        fprintf(stderr, "%s", buffer);
+    }
+    fprintf(stderr, "=== END DEBUG DUMP ===\n");
+    fclose(f);
 }
 
 // Process a directory recursively, collecting all matching files
@@ -1531,6 +1549,10 @@ int main(int argc, char *argv[]) {
         }
     } else {
         log_message(LOG_INFO, "Scraper completed successfully: %s", output_file);
+        // Debug dump the output file
+        if (config.verbose) {
+            debug_dump_file(output_file);
+        }
         free(output_file);
     }
 
