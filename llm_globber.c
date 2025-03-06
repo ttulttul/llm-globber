@@ -952,6 +952,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
     // Check for binary content
     if (file_size > 0 && is_binary_data(file_data, file_size)) {
         fprintf(config->output_file, "[Binary file - contents omitted]\n'''\n");
+        fflush(config->output_file); // Ensure content is written
     } else {
         // Process and write file content
         if (file_size > 0) {
@@ -967,6 +968,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
             }
         }
         fprintf(config->output_file, "\n'''\n"); // Add closing marker with newline
+        fflush(config->output_file); // Ensure content is written
     }
 
     // Unlock the mutex
@@ -1074,6 +1076,7 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     }
 
     fprintf(config->output_file, "\n'''\n");
+    fflush(config->output_file); // Ensure content is written
 
     // Unlock the mutex
     pthread_mutex_unlock(&config->output_mutex);
@@ -1301,7 +1304,8 @@ char* run_scraper(ScrapeConfig *config) {
     // Clean up output buffer
     free(out_buffer);
 
-    // Close output file
+    // Flush and close output file
+    fflush(config->output_file);
     fclose(config->output_file);
     config->output_file = NULL;
 
@@ -1556,10 +1560,8 @@ int main(int argc, char *argv[]) {
         }
     } else {
         log_message(LOG_INFO, "Scraper completed successfully: %s", output_file);
-        // Debug dump the output file
-        if (config.verbose) {
-            debug_dump_file(output_file);
-        }
+        // Always debug dump the output file for testing
+        debug_dump_file(output_file);
         free(output_file);
     }
 
