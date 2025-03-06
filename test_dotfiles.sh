@@ -18,13 +18,13 @@ echo "Regular file content" > "$TEST_DIR/regular.txt"
 echo "Dotfile content" > "$TEST_DIR/.dotfile"
 echo "Hidden config content" > "$TEST_DIR/.config"
 
-# Run llm_globber with all files option
+# Run llm_globber with all files option and recursive flag
 OUTPUT_DIR="$(pwd)/test_output"
 # Ensure the directory exists
 mkdir -p "$OUTPUT_DIR"
 
 # Capture both stdout and stderr
-OUTPUT=$(./llm_globber -o "$OUTPUT_DIR" -n dotfile_test -a "$TEST_DIR" 2>&1)
+OUTPUT=$(./llm_globber -o "$OUTPUT_DIR" -n dotfile_test -a -r "$TEST_DIR" 2>&1)
 echo "$OUTPUT"  # Display the output for debugging
 
 # Check if warning was generated
