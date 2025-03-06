@@ -46,6 +46,7 @@ typedef struct {
     int recursive;
     char name_pattern[MAX_PATH_LEN];
     int verbose;               // Verbosity flag
+    int quiet;                 // Suppress all output flag
 } ScrapeConfig;
 
 // Function prototypes
@@ -70,9 +71,12 @@ int is_binary_file(const char *path);
 int is_dot_file(const char *file_path);
 int process_file(FILE *output, const char *file_path, int detect_binary);
 
+// Global quiet flag
+static int g_quiet_mode = 0;
+
 // Safe logging function
 void log_message(LogLevel level, const char *format, ...) {
-    if (level > g_log_level) {
+    if (g_quiet_mode || level > g_log_level) {
         return;
     }
 
@@ -140,6 +144,7 @@ int init_config(ScrapeConfig *config) {
     config->filter_files = 1;
     config->recursive = 0;
     config->verbose = 0;
+    config->quiet = 0;
     
     // Initialize dynamic arrays
     config->repo_path_capacity = 10; // Start with space for 10 paths
@@ -638,6 +643,7 @@ void print_usage(const char *program_name) {
     printf("  -r             Recursively process directories\n");
     printf("  -name PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')\n");
     printf("  -v             Verbose output\n");
+    printf("  -q             Quiet mode (suppress all output)\n");
     printf("  -h             Show this help message\n");
 }
 
@@ -672,6 +678,9 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "-v") == 0) {
             config.verbose = 1;
             g_log_level = LOG_DEBUG;
+        } else if (strcmp(argv[i], "-q") == 0) {
+            config.quiet = 1;
+            g_quiet_mode = 1;
         } else if (strcmp(argv[i], "-h") == 0) {
             print_usage(argv[0]);
             free_config(&config);
@@ -700,6 +709,15 @@ int main(int argc, char *argv[]) {
         print_usage(argv[0]);
         free_config(&config);
         return EXIT_FAILURE;
+    }
+    
+    // Set log level based on verbose flag (if not in quiet mode)
+    if (!config.quiet) {
+        if (config.verbose) {
+            g_log_level = LOG_DEBUG;
+        } else {
+            g_log_level = LOG_WARN;  // Only show warnings and errors by default
+        }
     }
     
     // Process each file or directory argument
