@@ -1,14 +1,14 @@
-# Folder to Text
+# LLM Globber
 
-A command-line utility that combines multiple files into a single text document with clear file separators. This tool is useful for creating compilations of code or text files for documentation, analysis, or sharing.
+A command-line utility that combines multiple files into a single text document with clear file separators. This tool is specifically designed for preparing source code to be pasted into Large Language Models (LLMs) like Google Gemini 2.0 Thinking, allowing the LLM to analyze your entire codebase within its context window.
 
 ## Features
 
-- Combine multiple files into a single text document
-- Filter files by file extension
-- Add clear file separators with filenames
+- Combine multiple files into a single text document for LLM analysis
+- Filter files by file extension to focus on relevant code
+- Add clear file separators with filenames for better LLM understanding
 - Handle binary files with safe character replacement
-- Clean up excessive newlines in the output
+- Clean up excessive newlines to optimize token usage
 - Timestamp output files for version tracking
 
 ## Installation
@@ -28,13 +28,13 @@ make
 
 Or compile manually:
 ```bash
-gcc -Wall -Wextra -O2 -o folder_to_text folder_to_text.c
+gcc -Wall -Wextra -O2 -o llm_globber llm_globber.c
 ```
 
 ## Usage
 
 ```
-./folder_to_text [options] [files...]
+./llm_globber [options] [files...]
 ```
 
 ### Options
@@ -49,29 +49,34 @@ gcc -Wall -Wextra -O2 -o folder_to_text folder_to_text.c
 
 ### Examples
 
-Combine C source files and headers into a single document:
+Combine C source files and headers into a single document for LLM analysis:
 ```bash
-./folder_to_text -o ./output -n project_source -t .c,.h src/main.c include/header.h src/utils.c
+./llm_globber -o ./output -n project_source -t .c,.h src/main.c include/header.h src/utils.c
 ```
 
 Combine all files from a project regardless of type:
 ```bash
-./folder_to_text -o ./output -n project_all -a src/* include/* docs/*
+./llm_globber -o ./output -n project_all -a src/* include/* docs/*
 ```
 
 Recursively find and combine all C files in a project:
 ```bash
-./folder_to_text -o ./output -n project_c_files -name "*.c" -r src/ lib/
+./llm_globber -o ./output -n project_c_files -name "*.c" -r src/ lib/
 ```
 
 Recursively find and combine all header files:
 ```bash
-./folder_to_text -o ./output -n project_headers -name "*.h" -r .
+./llm_globber -o ./output -n project_headers -name "*.h" -r .
 ```
 
 Combine specific file types recursively:
 ```bash
-./folder_to_text -o ./output -n project_docs -t .md,.txt -r docs/
+./llm_globber -o ./output -n project_docs -t .md,.txt -r docs/
+```
+
+Prepare your entire codebase for LLM analysis:
+```bash
+./llm_globber -o ./output -n for_llm -t .py,.js,.html,.css,.md -r .
 ```
 
 ## Output Format

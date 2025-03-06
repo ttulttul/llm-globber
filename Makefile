@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -Wextra -O2
-TARGET = folder_to_text
-SRCS = folder_to_text.c
+TARGET = llm_globber
+SRCS = llm_globber.c
 OBJS = $(SRCS:.c=.o)
 
 all: $(TARGET)
