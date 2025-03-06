@@ -26,12 +26,12 @@ TEST_FILES="test_files/test1.c test_files/test1.h"
 # Expected output: manually concatenate the files
 EXPECTED_OUTPUT="test_output/expected_basic.txt"
 echo "" > $EXPECTED_OUTPUT
-echo "'''--- test1.c ---" >> $EXPECTED_OUTPUT
+echo "'''--- $(pwd)/test_files/test1.c ---" >> $EXPECTED_OUTPUT
 cat test_files/test1.c >> $EXPECTED_OUTPUT
 echo "" >> $EXPECTED_OUTPUT
 echo "'''" >> $EXPECTED_OUTPUT
 echo "" >> $EXPECTED_OUTPUT
-echo "'''--- test1.h ---" >> $EXPECTED_OUTPUT
+echo "'''--- $(pwd)/test_files/test1.h ---" >> $EXPECTED_OUTPUT
 cat test_files/test1.h >> $EXPECTED_OUTPUT
 echo "" >> $EXPECTED_OUTPUT
 echo "'''" >> $EXPECTED_OUTPUT
@@ -60,11 +60,11 @@ EXPECTED_LINES=$(wc -l < "$EXPECTED_OUTPUT")
 ACTUAL_LINES=$(wc -l < "$ACTUAL_OUTPUT")
 
 # Check if test1.c appears before test1.h in the output file
-if grep -A 1 "test1.c" "$ACTUAL_OUTPUT" | grep -q "This is a C file" && \
-   grep -A 1 "test1.h" "$ACTUAL_OUTPUT" | grep -q "This is a header file"; then
+if grep -A 1 "test_files/test1.c" "$ACTUAL_OUTPUT" | grep -q "This is a C file" && \
+   grep -A 1 "test_files/test1.h" "$ACTUAL_OUTPUT" | grep -q "This is a header file"; then
     # Now check the order: test1.c should come before test1.h
-    C_LINE=$(grep -n "test1.c" "$ACTUAL_OUTPUT" | cut -d':' -f1)
-    H_LINE=$(grep -n "test1.h" "$ACTUAL_OUTPUT" | cut -d':' -f1)
+    C_LINE=$(grep -n "test_files/test1.c" "$ACTUAL_OUTPUT" | cut -d':' -f1)
+    H_LINE=$(grep -n "test_files/test1.h" "$ACTUAL_OUTPUT" | cut -d':' -f1)
     
     if [ "$C_LINE" -lt "$H_LINE" ]; then
         # Check if line counts match

@@ -945,7 +945,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
     // Lock the output file mutex for thread safety (even in sequential mode for consistency and safety)
     pthread_mutex_lock(&config->output_mutex);
 
-    // Write file header
+    // Write file header - use the full path
     fprintf(config->output_file, "'''--- %s ---\n", file_path);
 
     // Check for binary content
