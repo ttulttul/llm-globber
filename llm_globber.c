@@ -951,7 +951,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
         return 0;
     }
     
-    // Get file basename for the header
+    // Get file basename for checking dot files
     char *path_copy = safe_strdup(file_path);
     char *base_name = basename(path_copy);
     
@@ -991,8 +991,8 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
     // Lock the output file mutex for thread safety
     pthread_mutex_lock(&config->output_mutex);
     
-    // Write file header - use the actual filename
-    fprintf(config->output_file, "\n'''--- %s ---\n", base_name);
+    // Write file header - use the full path
+    fprintf(config->output_file, "\n'''--- %s ---\n", file_path);
     
     // Check for binary content
     if (file_size > 0 && is_binary_data(file_data, file_size)) {
@@ -1062,7 +1062,7 @@ int process_file(ScrapeConfig *config, const char *file_path) {
         return process_file_mmap(config, file_path, file_size);
     }
     
-    // Get file basename for the header
+    // Get file basename for checking dot files
     char *path_copy = safe_strdup(file_path);
     char *base_name = basename(path_copy);
     
@@ -1098,8 +1098,8 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     // Lock the output file mutex for thread safety
     pthread_mutex_lock(&config->output_mutex);
     
-    // Write file header - use the actual filename
-    fprintf(config->output_file, "\n'''--- %s ---\n", base_name);
+    // Write file header - use the full path
+    fprintf(config->output_file, "\n'''--- %s ---\n", file_path);
     
     // Handle binary files
     if (is_binary) {
