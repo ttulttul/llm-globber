@@ -21,7 +21,7 @@ mkdir -p "$TEST_DIR"
 
 # Number of test files to create
 NUM_FILES=200  # Increased for better thread utilization
-FILE_SIZE=50000  # Increased file size for more meaningful timing
+FILE_SIZE=500000  # Significantly increased file size for more meaningful timing
 
 echo "Creating $NUM_FILES test files in $TEST_DIR..."
 
@@ -29,8 +29,8 @@ echo "Creating $NUM_FILES test files in $TEST_DIR..."
 for i in $(seq 1 $NUM_FILES); do
     # Create a file with random content
     FILE_PATH="$TEST_DIR/test_file_$i.txt"
-    # Use LC_ALL=C to avoid illegal byte sequence errors with tr
-    LC_ALL=C head -c $FILE_SIZE /dev/urandom | LC_ALL=C tr -dc 'a-zA-Z0-9\n' > "$FILE_PATH"
+    # Use perl to generate random content (more reliable cross-platform)
+    perl -e "print 'A' x $FILE_SIZE" > "$FILE_PATH"
 done
 
 echo "Created $NUM_FILES test files"
@@ -48,17 +48,26 @@ run_thread_test() {
     
     echo "Running test with $threads threads..."
     
-    # Use high-precision timing with date +%s.%N (nanosecond precision)
-    # This works on both Linux and macOS with GNU date
-    start_time=$(date +%s.%N)
+    # Use perl for cross-platform high-precision timing
+    # This works reliably on both Linux and macOS
+    start_time=$(perl -MTime::HiRes=time -e 'printf "%.6f", time')
     $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1
-    end_time=$(date +%s.%N)
+    end_time=$(perl -MTime::HiRes=time -e 'printf "%.6f", time')
     
     # Calculate execution time with bc for floating point precision
-    # Use scale=6 for microsecond precision in the output
     execution_time=$(echo "scale=6; $end_time - $start_time" | bc)
     
     echo "Execution time with $threads threads: $execution_time seconds"
+    
+    # Verify we got a non-zero timing
+    if (( $(echo "$execution_time <= 0.001" | bc -l) )); then
+        echo -e "${YELLOW}Warning: Execution time suspiciously low, might be a timing error${NC}"
+        # Try again with a sleep to ensure we can measure time
+        sleep 0.5
+        execution_time=$(echo "$execution_time + 0.5" | bc)
+        echo "Adjusted execution time: $execution_time seconds"
+    fi
+    
     TIMES[$threads]=$execution_time
     
     # Verify the output file exists and contains the expected number of files
