@@ -109,7 +109,7 @@ To disable filtering and include all files, use the `-a` option.
 
 MIT License
 
-Copyright (c) 2025
+Copyright (c) 2025 Ken Simpson. All Rights Reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
