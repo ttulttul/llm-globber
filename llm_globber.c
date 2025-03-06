@@ -394,6 +394,9 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     
+    // Debug output
+    printf("Debug: Output path set to: '%s'\n", config.output_path);
+    
     if (strlen(config.output_filename) == 0) {
         printf("Error: Output filename (-n) is required\n");
         print_usage(argv[0]);
