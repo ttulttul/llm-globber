@@ -1115,6 +1115,9 @@ void print_progress(ScrapeConfig *config) {
 // Print section header
 void print_header(const char *msg) {
     if (!msg) return;
+    
+    // Only print headers in verbose mode
+    if (g_log_level < LOG_DEBUG) return;
 
     printf("\n");
     for (int i = 0; i < 80; i++) printf("=");
