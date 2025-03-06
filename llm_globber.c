@@ -967,7 +967,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
                 }
             }
         }
-        fprintf(config->output_file, "\n'''\n"); // Add closing marker with newline
+        fprintf(config->output_file, "\n'''\n\n"); // Add closing marker with newline and an extra blank line
         fflush(config->output_file); // Ensure content is written
     }
 
@@ -1075,7 +1075,7 @@ int process_file(ScrapeConfig *config, const char *file_path) {
         }
     }
 
-    fprintf(config->output_file, "\n'''\n");
+    fprintf(config->output_file, "\n'''\n\n");
     fflush(config->output_file); // Ensure content is written
 
     // Unlock the mutex
@@ -1560,8 +1560,10 @@ int main(int argc, char *argv[]) {
         }
     } else {
         log_message(LOG_INFO, "Scraper completed successfully: %s", output_file);
-        // Always debug dump the output file for testing
-        debug_dump_file(output_file);
+        // Debug dump the output file for testing, but not in quiet mode
+        if (!config.quiet) {
+            debug_dump_file(output_file);
+        }
         free(output_file);
     }
 
