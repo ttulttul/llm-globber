@@ -20,8 +20,12 @@ echo "Hidden config content" > "$TEST_DIR/.config"
 
 # Run llm_globber with all files option
 OUTPUT_DIR="$(pwd)/test_output"
+# Ensure the directory exists
+mkdir -p "$OUTPUT_DIR"
+
 # Capture both stdout and stderr
 OUTPUT=$(./llm_globber -o "$OUTPUT_DIR" -n dotfile_test -a "$TEST_DIR" 2>&1)
+echo "$OUTPUT"  # Display the output for debugging
 
 # Check if warning was generated
 if echo "$OUTPUT" | grep -q "WARNING: Including dot file"; then
@@ -33,12 +37,15 @@ else
 fi
 
 # Find the generated output file
-ACTUAL_OUTPUT=$(ls -t test_output/dotfile_test_*.txt | head -1)
+ACTUAL_OUTPUT=$(find "$OUTPUT_DIR" -name "dotfile_test_*.txt" -type f -print | sort -r | head -1)
 
 if [ -z "$ACTUAL_OUTPUT" ]; then
     echo "Error: No output file was generated"
+    ls -la "$OUTPUT_DIR"  # List directory contents for debugging
     exit 1
 fi
+
+echo "Found output file: $ACTUAL_OUTPUT"
 
 # Check if the output file contains the dotfiles
 DOTFILE_COUNT=$(grep -c "'''\-\-\- \.dotfile \-\-\-" "$ACTUAL_OUTPUT")
@@ -49,6 +56,7 @@ if [ "$DOTFILE_COUNT" -eq 1 ] && [ "$CONFIG_COUNT" -eq 1 ]; then
     CONTENT_TEST_PASSED=true
 else
     echo "✗ Dotfiles not correctly included in output"
+    echo "Dotfile count: $DOTFILE_COUNT, Config count: $CONFIG_COUNT"
     CONTENT_TEST_PASSED=false
 fi
 
