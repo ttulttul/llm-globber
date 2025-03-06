@@ -90,10 +90,7 @@ typedef struct ScrapeConfig {
     pthread_mutex_t output_mutex; // Mutex for synchronizing output file access (still used for sequential output)
     // ThreadPool* thread_pool;   // Thread pool for parallel processing - REMOVED
     int abort_on_error;        // 1 if we should abort on errors
-    int sandbox_to_output_dir; // 1 if we should sandbox operations to output directory
     int show_progress;         // 1 if we should show progress indicators
-    char* safe_zone_path;      // Path to restrict operations to
-    int safe_mode;             // 1 if running in safe mode
     int processed_files;       // Counter for processed files
     int failed_files;          // Counter for failed files
     struct timeval start_time; // Start time for progress reporting
@@ -376,9 +373,7 @@ int init_config(ScrapeConfig *config) {
     config->max_file_size = DEFAULT_MAX_FILE_SIZE;
     config->num_threads = DEFAULT_NUM_THREADS; // Always 1 now
     config->abort_on_error = 0;
-    config->sandbox_to_output_dir = 1;
     config->show_progress = 1;
-    config->safe_mode = 1;
     config->thread_mode = 0; // Always sequential
 
     // Initialize mutex
@@ -431,8 +426,6 @@ void free_config(ScrapeConfig *config) {
     }
 
 
-    // Free safe zone path
-    free(config->safe_zone_path);
 
     // Destroy mutex
     pthread_mutex_destroy(&config->output_mutex);
@@ -583,27 +576,9 @@ size_t get_file_size(const char *path) {
     return (size_t)st.st_size;
 }
 
-// Check if the path is safe to access
+// Check if the path is safe to access - always returns 1 now
 int is_safe_path(ScrapeConfig *config, const char *path) {
-    if (!config || !path) return 0;
-
-    // If no safe zone set, all paths are allowed
-    if (!config->safe_mode || !config->safe_zone_path) {
-        return 1;
-    }
-
-    char *real_path = realpath(path, NULL);
-    if (!real_path) {
-        // Path doesn't exist or can't be resolved
-        return 0;
-    }
-
-    // Check if path is within safe zone
-    int is_safe = (strncmp(real_path, config->safe_zone_path,
-                          strlen(config->safe_zone_path)) == 0);
-
-    free(real_path);
-    return is_safe;
+    return 1;
 }
 
 // Check if we have permission to access a file
@@ -989,12 +964,6 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
 int process_file(ScrapeConfig *config, const char *file_path) {
     if (!config || !file_path) return 0;
 
-    // Check if safe zone is enabled and path is allowed
-    if (config->safe_mode && !is_safe_path(config, file_path)) {
-        log_message(LOG_WARN, "Skipping file outside safe zone: %s", file_path);
-        return 0;
-    }
-
     // Check if file exists and is readable
     if (!is_regular_file(file_path)) {
         log_message(LOG_WARN, "Skipping invalid file path: %s", file_path);
@@ -1147,12 +1116,6 @@ void debug_dump_file(const char *filename) {
 void process_directory(ScrapeConfig *config, const char *dir_path) {
     if (!config || !dir_path) return;
 
-    // Check if path is in safe zone
-    if (config->safe_mode && !is_safe_path(config, dir_path)) {
-        log_message(LOG_WARN, "Skipping directory outside safe zone: %s", dir_path);
-        return;
-    }
-
     DIR *dir = opendir(dir_path);
     if (!dir) {
         log_message(LOG_ERROR, "Error opening directory %s: %s", dir_path, strerror(errno));
@@ -1243,12 +1206,6 @@ char* run_scraper(ScrapeConfig *config) {
         log_message(LOG_INFO, "Created output directory: %s", config->output_path);
     }
 
-    // Set safe zone if sandboxed
-    if (config->sandbox_to_output_dir) {
-        config->safe_zone_path = get_absolute_path(config->output_path);
-        log_message(LOG_INFO, "Sandbox mode enabled, restricting operations to: %s",
-                   config->safe_zone_path);
-    }
 
     // Generate timestamp
     time_t now = time(NULL);
@@ -1376,7 +1333,7 @@ void print_usage(const char *program_name) {
            (int)(DEFAULT_MAX_FILE_SIZE / (1024 * 1024)));
     printf("  -d             Include dot files (hidden files)\n");
     printf("  -p             Show progress indicators\n");
-    printf("  -u             Unrestricted mode (no path safety checks)\n");
+    printf("  -u             [Deprecated] This option has no effect\n");
     printf("  -e             Abort on errors (default is to continue)\n");
     printf("  -v             Verbose output\n");
     printf("  -q             Quiet mode (suppress all output)\n");
@@ -1435,8 +1392,8 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "-p") == 0) {
             config.show_progress = 1;
         } else if (strcmp(argv[i], "-u") == 0) {
-            config.safe_mode = 0;
-            config.sandbox_to_output_dir = 0;
+            // Option removed, but kept for backward compatibility
+            log_message(LOG_WARN, "The -u option is deprecated and has no effect");
         } else if (strcmp(argv[i], "-e") == 0) {
             config.abort_on_error = 1;
         } else if (strcmp(argv[i], "-v") == 0) {
