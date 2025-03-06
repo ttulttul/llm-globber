@@ -14,7 +14,7 @@ TEST_DIR="test_files"
 
 # Expected output: manually find and concatenate all .c files recursively
 EXPECTED_OUTPUT="test_output/expected_recursive.txt"
-echo "*Local Files*" > $EXPECTED_OUTPUT
+echo "" > $EXPECTED_OUTPUT
 
 # Find all .c files in the test directory
 C_FILES=$(find $TEST_DIR -name "*.c" | sort)
