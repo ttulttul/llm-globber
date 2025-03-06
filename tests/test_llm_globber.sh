@@ -12,6 +12,12 @@ NC='\033[0m' # No Color
 mkdir -p test_files/dir1/subdir
 mkdir -p test_files/dir2
 
+# Check if directories were created successfully
+if [ ! -d "test_files" ] || [ ! -d "test_files/dir1/subdir" ] || [ ! -d "test_files/dir2" ]; then
+    echo -e "${RED}Error: Failed to create test directories${NC}"
+    exit 1
+fi
+
 # Create test files with content
 echo "This is a C file" > test_files/test1.c
 echo "This is a header file" > test_files/test1.h

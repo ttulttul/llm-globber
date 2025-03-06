@@ -3,8 +3,17 @@
 # Test basic functionality of LLM Globber
 # This test checks if the tool correctly processes specified files
 
-# Create output directory
+# Create output directory and ensure test files directory exists
 mkdir -p test_output
+mkdir -p test_files
+
+# Ensure test files exist
+if [ ! -f "test_files/test1.c" ]; then
+    echo "This is a C file" > test_files/test1.c
+fi
+if [ ! -f "test_files/test1.h" ]; then
+    echo "This is a header file" > test_files/test1.h
+fi
 
 # Test case: Basic file processing
 echo "Test case: Basic file processing"
