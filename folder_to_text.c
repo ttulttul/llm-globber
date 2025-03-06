@@ -348,7 +348,6 @@ int main(int argc, char *argv[]) {
     }
     
     // Use getopt to parse standard options
-    int option_index = 0;
     int c;
     // Create a clean argv for getopt without the -name option and its value
     char *getopt_argv[argc];
