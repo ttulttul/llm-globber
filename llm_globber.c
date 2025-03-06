@@ -1503,6 +1503,9 @@ char* run_scraper(ScrapeConfig *config) {
         return NULL;
     }
     
+    // Write header
+    fprintf(config->output_file, "*Local Files*\n");
+    
     // Set secure permissions
     set_secure_file_permissions(output_file);
     

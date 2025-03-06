@@ -14,6 +14,7 @@ TEST_DIR="test_files"
 
 # Expected output: manually find and concatenate all .h files
 EXPECTED_OUTPUT="test_output/expected_file_types.txt"
+echo "*Local Files*" > $EXPECTED_OUTPUT
 
 # Find all .h files in the test directory (non-recursively)
 H_FILES=$(find $TEST_DIR -maxdepth 1 -name "*.h")

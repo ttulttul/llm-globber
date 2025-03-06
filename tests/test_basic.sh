@@ -14,6 +14,8 @@ TEST_FILES="test_files/test1.c test_files/test1.h"
 
 # Expected output: manually concatenate the files
 EXPECTED_OUTPUT="test_output/expected_basic.txt"
+echo "*Local Files*" > $EXPECTED_OUTPUT
+echo "" >> $EXPECTED_OUTPUT
 echo "'''--- test1.c ---" >> $EXPECTED_OUTPUT
 cat test_files/test1.c >> $EXPECTED_OUTPUT
 echo "" >> $EXPECTED_OUTPUT
