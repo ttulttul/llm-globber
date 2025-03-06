@@ -2,6 +2,10 @@
 
 LLM Globber is a command-line utility for collecting files from various locations, filtering them by type or name pattern, and outputting their contents to a single text file. This is particularly useful for preparing local files to be submitted to a Language Learning Model (LLM) for analysis.
 
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
 ## Features
 
 - Collect files from multiple directories or specific file paths
