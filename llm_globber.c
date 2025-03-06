@@ -991,7 +991,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
     // Lock the output file mutex for thread safety
     pthread_mutex_lock(&config->output_mutex);
     
-    // Write file header
+    // Write file header - use the actual filename
     fprintf(config->output_file, "\n'''--- %s ---\n", base_name);
     
     // Check for binary content
@@ -1098,7 +1098,7 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     // Lock the output file mutex for thread safety
     pthread_mutex_lock(&config->output_mutex);
     
-    // Write file header
+    // Write file header - use the actual filename
     fprintf(config->output_file, "\n'''--- %s ---\n", base_name);
     
     // Handle binary files

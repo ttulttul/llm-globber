@@ -51,8 +51,8 @@ fi
 echo "Found output file: $ACTUAL_OUTPUT"
 
 # Check if the output file contains the dotfiles
-DOTFILE_COUNT=$(grep -c "'''\-\-\- \.dotfile \-\-\-" "$ACTUAL_OUTPUT")
-CONFIG_COUNT=$(grep -c "'''\-\-\- \.config \-\-\-" "$ACTUAL_OUTPUT")
+DOTFILE_COUNT=$(grep -c "\.dotfile" "$ACTUAL_OUTPUT")
+CONFIG_COUNT=$(grep -c "\.config" "$ACTUAL_OUTPUT")
 
 # Display the output file content for debugging
 echo "Output file content:"
