@@ -23,7 +23,7 @@ echo "This is a deeply nested file" > test_files/dir1/subdir/deep.c
 echo "This is another directory file" > test_files/dir2/other.c
 
 # Make sure the llm_globber executable exists
-if [ ! -f "./llm_globber" ]; then
+if [ ! -f "../llm_globber" ]; then
     echo -e "${RED}Error: llm_globber executable not found. Please compile it first.${NC}"
     echo "Run 'make' to compile the program."
     exit 1
