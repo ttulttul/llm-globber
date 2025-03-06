@@ -1018,8 +1018,8 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
                 } else if (data[i] == '\n' || data[i] == '\r' || data[i] == '\t') {
                     buffer[buffer_size++] = data[i]; // Control characters
                 } else {
-                    // Single replacement character (UTF-8)
-                    buffer[buffer_size++] = '�';
+                    // Single replacement character (UTF-8 replacement character)
+                    buffer[buffer_size++] = '?'; // Use simple question mark instead
                 }
             }
             buffer[buffer_size] = '\0'; // Ensure null termination
@@ -1134,7 +1134,7 @@ int process_file(ScrapeConfig *config, const char *file_path) {
             } else if (buffer[j] == '\n' || buffer[j] == '\r' || buffer[j] == '\t') {
                 fputc(buffer[j], config->output_file); // Control characters
             } else {
-                fputs("�", config->output_file); // Single replacement character
+                fputs("?", config->output_file); // Simple replacement character
             }
         }
     }
