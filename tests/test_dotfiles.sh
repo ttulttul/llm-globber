@@ -27,6 +27,7 @@ mkdir -p "$OUTPUT_DIR"
 # Use -u flag to disable sandbox mode for testing
 # Use -d flag to include dot files
 OUTPUT=$(../llm_globber -o "$OUTPUT_DIR" -n dotfile_test -a -r -u -d "$TEST_DIR" 2>&1)
+echo "$OUTPUT"
 echo "$OUTPUT"  # Display the output for debugging
 
 # Check if warning was generated
@@ -52,6 +53,10 @@ echo "Found output file: $ACTUAL_OUTPUT"
 # Check if the output file contains the dotfiles
 DOTFILE_COUNT=$(grep -c "'''\-\-\- \.dotfile \-\-\-" "$ACTUAL_OUTPUT")
 CONFIG_COUNT=$(grep -c "'''\-\-\- \.config \-\-\-" "$ACTUAL_OUTPUT")
+
+# Display the output file content for debugging
+echo "Output file content:"
+cat "$ACTUAL_OUTPUT"
 
 if [ "$DOTFILE_COUNT" -eq 1 ] && [ "$CONFIG_COUNT" -eq 1 ]; then
     echo "✓ Dotfiles correctly included in output"

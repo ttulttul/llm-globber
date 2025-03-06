@@ -963,6 +963,8 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
             return 0;
         } else {
             log_message(LOG_WARN, "Including dot file: %s", file_path);
+            // Make sure we're actually including the file
+            // No early return here
         }
     }
     
@@ -1072,6 +1074,8 @@ int process_file(ScrapeConfig *config, const char *file_path) {
             return 0;
         } else {
             log_message(LOG_WARN, "Including dot file: %s", file_path);
+            // Make sure we're actually including the file
+            // No early return here
         }
     }
     
