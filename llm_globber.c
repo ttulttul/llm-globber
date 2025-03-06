@@ -1514,11 +1514,8 @@ int main(int argc, char *argv[]) {
         return EXIT_ARGS_ERROR;
     }
 
-    // Sort files by size (largest first) - still beneficial for sequential processing in some cases
-    if (config.file_entry_count > 1) {
-        qsort(config.file_entries, config.file_entry_count, sizeof(FileEntry),
-              compare_file_entries_by_size);
-    }
+    // Don't sort files by size to preserve command line order
+    // This ensures files are processed in the exact order specified by the user
 
     // Run the scraper
     char *output_file = run_scraper(&config);

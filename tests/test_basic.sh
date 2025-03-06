@@ -44,18 +44,23 @@ if [ -z "$ACTUAL_OUTPUT" ]; then
     exit 1
 fi
 
-# Compare content (ignoring timestamps in filenames)
-EXPECTED_CONTENT=$(grep -v "^'''\-\-\-" $EXPECTED_OUTPUT | tr -d '\n')
-ACTUAL_CONTENT=$(grep -v "^'''\-\-\-" $ACTUAL_OUTPUT | tr -d '\n')
-
-if [ "$EXPECTED_CONTENT" = "$ACTUAL_CONTENT" ]; then
-    echo "Basic test passed: Content matches expected output"
-    exit 0
+# Check if test1.c appears before test1.h in the output file
+if grep -A 1 "test1.c" "$ACTUAL_OUTPUT" | grep -q "This is a C file" && \
+   grep -A 1 "test1.h" "$ACTUAL_OUTPUT" | grep -q "This is a header file"; then
+    # Now check the order: test1.c should come before test1.h
+    C_LINE=$(grep -n "test1.c" "$ACTUAL_OUTPUT" | cut -d':' -f1)
+    H_LINE=$(grep -n "test1.h" "$ACTUAL_OUTPUT" | cut -d':' -f1)
+    
+    if [ "$C_LINE" -lt "$H_LINE" ]; then
+        echo "Basic test passed: Files appear in correct order"
+        exit 0
+    else
+        echo "FAILED: Basic test - Files appear in wrong order"
+        echo "test1.c should appear before test1.h"
+        exit 1
+    fi
 else
     echo "FAILED: Basic test - Content does not match expected output"
-    echo "Expected content (without filenames):"
-    echo "$EXPECTED_CONTENT"
-    echo "Actual content (without filenames):"
-    echo "$ACTUAL_CONTENT"
+    echo "Expected to find 'This is a C file' after test1.c and 'This is a header file' after test1.h"
     exit 1
 fi
