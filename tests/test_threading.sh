@@ -37,7 +37,8 @@ echo "Created $NUM_FILES test files"
 
 # Array to store execution times
 declare -a TIMES
-declare -a THREAD_COUNTS=(1 2 4)
+# Test with more thread count variations for better analysis
+declare -a THREAD_COUNTS=(1 2 4 8)
 
 # Function to run test with specific thread count
 run_thread_test() {
@@ -47,24 +48,15 @@ run_thread_test() {
     
     echo "Running test with $threads threads..."
     
-    # Time the execution using time command for more accurate measurement
-    # Use /usr/bin/time for more consistent output format across systems
-    if command -v /usr/bin/time >/dev/null 2>&1; then
-        time_output=$( /usr/bin/time -p $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1 )
-        execution_time=$(echo "$time_output" | grep real | awk '{print $2}')
-    else
-        # Fall back to built-in time command
-        time_output=$( { time $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1; } 2>&1 )
-        execution_time=$(echo "$time_output" | grep real | awk '{print $2}' | sed 's/s//')
-    fi
+    # Use high-precision timing with date +%s.%N (nanosecond precision)
+    # This works on both Linux and macOS with GNU date
+    start_time=$(date +%s.%N)
+    $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1
+    end_time=$(date +%s.%N)
     
-    # If time command didn't work as expected, fall back to date method
-    if [ -z "$execution_time" ]; then
-        start_time=$(date +%s.%N)
-        $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1
-        end_time=$(date +%s.%N)
-        execution_time=$(echo "$end_time - $start_time" | bc)
-    fi
+    # Calculate execution time with bc for floating point precision
+    # Use scale=6 for microsecond precision in the output
+    execution_time=$(echo "scale=6; $end_time - $start_time" | bc)
     
     echo "Execution time with $threads threads: $execution_time seconds"
     TIMES[$threads]=$execution_time
@@ -86,7 +78,7 @@ run_thread_test() {
 }
 
 # Run tests with different thread counts
-echo "Starting performance tests..."
+echo "Starting performance tests with high-precision timing..."
 
 # Run tests with increasing thread counts
 TEST_PASSED=true
@@ -102,14 +94,20 @@ done
 if [ "${#TIMES[@]}" -ge 2 ] && [ -n "${TIMES[1]}" ] && [ -n "${TIMES[4]}" ]; then
     # Avoid division by zero by checking if times are greater than zero
     if (( $(echo "${TIMES[1]} > 0" | bc -l) )) && (( $(echo "${TIMES[4]} > 0" | bc -l) )); then
-        speedup=$(echo "${TIMES[1]} / ${TIMES[4]}" | bc -l)
+        # Calculate speedup with 6 decimal places for higher precision
+        speedup=$(echo "scale=6; ${TIMES[1]} / ${TIMES[4]}" | bc)
         echo "Speedup with 4 threads vs 1 thread: $speedup"
+        
+        # Print individual timings with high precision
+        echo "Time with 1 thread: ${TIMES[1]} seconds"
+        echo "Time with 4 threads: ${TIMES[4]} seconds"
+        echo "Time difference: $(echo "scale=6; ${TIMES[1]} - ${TIMES[4]}" | bc) seconds"
         
         # Expect at least some speedup (1.2x) with 4 threads
         if (( $(echo "$speedup > 1.2" | bc -l) )); then
             echo -e "${GREEN}✓ Multi-threading provides performance improvement${NC}"
         else
-            echo -e "${RED}✗ Multi-threading does not provide significant performance improvement${NC}"
+            echo -e "${YELLOW}⚠ Multi-threading does not provide significant performance improvement${NC}"
             # Don't fail the test for this, as performance can vary by system
             echo "This is not a test failure, just an observation."
         fi
