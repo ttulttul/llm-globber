@@ -39,6 +39,7 @@ Options:
   -r             Recursively process directories
   -name PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')
   -v             Verbose output
+  -q             Quiet mode (suppress all output)
   -h             Show this help message
 ```
 
@@ -66,6 +67,18 @@ llm_globber -o output -n config_files -name "*config*" /path/to/project
 
 ```bash
 llm_globber -o output -n important_files file1.c file2.h file3.txt
+```
+
+### Process files with verbose output
+
+```bash
+llm_globber -o output -n debug_files -v -r /path/to/project
+```
+
+### Process files silently (no output)
+
+```bash
+llm_globber -o output -n silent_run -q -r /path/to/project
 ```
 
 ## Safety Features
