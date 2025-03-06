@@ -946,7 +946,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
     pthread_mutex_lock(&config->output_mutex);
 
     // Write file header
-    fprintf(config->output_file, "\n'''--- %s ---\n", file_path);
+    fprintf(config->output_file, "'''--- %s ---\n", file_path);
 
     // Check for binary content
     if (file_size > 0 && is_binary_data(file_data, file_size)) {
@@ -1044,7 +1044,7 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     pthread_mutex_lock(&config->output_mutex);
 
     // Write file header - use the full path
-    fprintf(config->output_file, "\n'''--- %s ---\n", file_path);
+    fprintf(config->output_file, "'''--- %s ---\n", file_path);
 
     // Handle binary files
     if (is_binary) {
