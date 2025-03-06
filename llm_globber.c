@@ -1510,9 +1510,6 @@ char* run_scraper(ScrapeConfig *config) {
     char *out_buffer = safe_malloc(IO_BUFFER_SIZE);
     setvbuf(config->output_file, out_buffer, _IOFBF, IO_BUFFER_SIZE);
     
-    // Write header
-    fprintf(config->output_file, "*Local Files*\n");
-    
     // Initialize thread pool if more than one thread is requested
     if (config->num_threads > 1) {
         init_thread_pool(config);
