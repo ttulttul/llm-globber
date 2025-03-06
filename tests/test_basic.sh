@@ -9,9 +9,11 @@ mkdir -p test_files
 
 # Ensure test files exist
 if [ ! -f "test_files/test1.c" ]; then
+    echo "Creating test_files/test1.c"
     echo "This is a C file" > test_files/test1.c
 fi
 if [ ! -f "test_files/test1.h" ]; then
+    echo "Creating test_files/test1.h"
     echo "This is a header file" > test_files/test1.h
 fi
 
