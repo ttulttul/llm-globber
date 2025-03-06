@@ -1,151 +1,111 @@
 # LLM Globber
 
-A command-line utility that combines multiple files into a single text document with clear file separators. This tool is specifically designed for preparing source code to be pasted into Large Language Models (LLMs) like Google Gemini 2.0 Thinking, allowing the LLM to analyze your entire codebase within its context window.
+LLM Globber is a command-line utility for collecting files from various locations, filtering them by type or name pattern, and outputting their contents to a single text file. This is particularly useful for preparing local files to be submitted to a Language Learning Model (LLM) for analysis.
 
 ## Features
 
-- Combine multiple files into a single text document for LLM analysis
-- Filter files by file extension to focus on relevant code
-- Add clear file separators with filenames for better LLM understanding
-- Handle binary files with safe character replacement
-- Clean up excessive newlines to optimize token usage
-- Timestamp output files for version tracking
+- Collect files from multiple directories or specific file paths
+- Filter files by extension or name pattern
+- Recursively process directories
+- Automatically detect and properly handle binary files
+- Clean up output file by removing excessive newlines
+- Add file headers to the output for better organization
+- Generate timestamped output files to prevent overwriting
+- Robust error handling and reporting
 
 ## Installation
 
-### Prerequisites
-
-- GCC or compatible C compiler
-- Make (optional, for using the provided Makefile)
-
-### Building from Source
-
-1. Clone the repository or download the source files
-2. Build using make:
 ```bash
-make
+# Compile the source
+gcc -o llm_globber llm_globber.c -Wall -Wextra -O2
+
+# Install to system (optional)
+sudo cp llm_globber /usr/local/bin/
 ```
-
-Or compile manually:
-```bash
-gcc -Wall -Wextra -O2 -o llm_globber llm_globber.c
-```
-
-## Testing
-
-The project includes a test suite to verify functionality. To run all tests:
-
-```bash
-make test
-```
-
-This will:
-1. Build the project if needed
-2. Make the test scripts executable
-3. Run the test suite (test_llm_globber.sh)
-
-The test suite includes several test cases:
-- Basic functionality tests
-- File type filtering tests
-- Name pattern filtering tests
-- Recursive directory processing tests
-
-Each test will report success or failure with clear output messages.
 
 ## Usage
 
 ```
-./llm_globber [options] [files...]
+Usage: llm_globber [options] [files/directories...]
+Options:
+  -o PATH        Output directory path
+  -n NAME        Output filename (without extension)
+  -t TYPES       File types to include (comma separated, e.g. '.c,.h,.txt')
+  -a             Include all files (no filtering by type)
+  -r             Recursively process directories
+  -name PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')
+  -v             Verbose output
+  -h             Show this help message
 ```
 
-### Options
+## Examples
 
-- `-o PATH` - Output directory path (required)
-- `-n NAME` - Output filename without extension (required)
-- `-t TYPES` - File types to include, comma separated (e.g., `.c,.h,.txt`)
-- `-a` - Include all files (disable filtering by file type)
-- `-r` - Recursively process directories
-- `-name PATTERN` - Filter files by name pattern using glob syntax (e.g., `*.c`)
-- `-h` - Show help message
+### Process all C source files in the current directory
 
-### Examples
-
-Combine C source files and headers into a single document for LLM analysis:
 ```bash
-./llm_globber -o ./output -n project_source -t .c,.h src/main.c include/header.h src/utils.c
+llm_globber -o output -n c_sources -t .c .
 ```
 
-Combine all files from a project regardless of type:
+### Process all files in a project directory recursively
+
 ```bash
-./llm_globber -o ./output -n project_all -a src/* include/* docs/*
+llm_globber -o output -n project_files -a -r /path/to/project
 ```
 
-Recursively find and combine all C files in a project:
+### Process only files that match a specific pattern
+
 ```bash
-./llm_globber -o ./output -n project_c_files -name "*.c" -r src/ lib/
+llm_globber -o output -n config_files -name "*config*" /path/to/project
 ```
 
-Recursively find and combine all header files:
+### Process specific files
+
 ```bash
-./llm_globber -o ./output -n project_headers -name "*.h" -r .
+llm_globber -o output -n important_files file1.c file2.h file3.txt
 ```
 
-Combine specific file types recursively:
-```bash
-./llm_globber -o ./output -n project_docs -t .md,.txt -r docs/
-```
+## Safety Features
 
-Prepare your entire codebase for LLM analysis:
-```bash
-./llm_globber -o ./output -n for_llm -t .py,.js,.html,.css,.md -r .
-```
+- Path sanitization to prevent directory traversal attacks
+- Binary file detection with automatic handling
+- Secure memory management with checks on all allocation paths
+- Proper error handling and reporting
+- Secure file permissions for output files
+
+## Performance Optimizations
+
+- Efficient file I/O with optimized buffer sizes
+- Streaming file processing to minimize memory usage
+- Dynamic memory allocation that scales with input size
+- Optimized string processing and file cleanup
+- Efficient directory traversal
 
 ## Output Format
 
-The output file will be named according to the pattern `NAME_TIMESTAMP.txt`, where:
-- `NAME` is the value provided with the `-n` option
-- `TIMESTAMP` is the current date and time in format `YYYYMMDDHHMMSS`
-
-Each file in the output will be formatted as:
+The output file will have the following format:
 
 ```
-'''--- filename.ext ---
-[file content]
+*Local Files*
+
+'''--- file1.c ---
+[Contents of file1.c]
+'''
+
+'''--- file2.h ---
+[Contents of file2.h]
+'''
+
+...
+```
+
+## Binary File Handling
+
+When a binary file is detected, its contents are not included in the output file, but instead it's marked as:
+
+```
+'''--- binary_file.bin ---
+[Binary file - contents omitted]
 '''
 ```
 
-## File Type Filtering
-
-By default, the program filters files based on their extensions. Only files with extensions matching those provided with the `-t` option will be included.
-
-To disable filtering and include all files, use the `-a` option.
-
-## Error Handling
-
-- The program will report errors when files cannot be read
-- Non-UTF-8 characters in files will be replaced with the Unicode replacement character (�)
-- Appropriate error messages will be displayed if required parameters are missing
-
-## License
-
-MIT License
-
-Copyright (c) 2025 Ken Simpson. All Rights Reserved.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+This prevents corruption of the output file and makes it more suitable for use with LLMs.
