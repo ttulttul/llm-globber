@@ -31,6 +31,27 @@ Or compile manually:
 gcc -Wall -Wextra -O2 -o llm_globber llm_globber.c
 ```
 
+## Testing
+
+The project includes a test suite to verify functionality. To run all tests:
+
+```bash
+make test
+```
+
+This will:
+1. Build the project if needed
+2. Make the test scripts executable
+3. Run the test suite (test_llm_globber.sh)
+
+The test suite includes several test cases:
+- Basic functionality tests
+- File type filtering tests
+- Name pattern filtering tests
+- Recursive directory processing tests
+
+Each test will report success or failure with clear output messages.
+
 ## Usage
 
 ```
