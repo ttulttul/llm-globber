@@ -988,44 +988,56 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
         }
     }
     
-    // Lock the output file mutex for thread safety
-    pthread_mutex_lock(&config->output_mutex);
+    // Prepare output in a thread-local buffer to minimize mutex lock time
+    char *buffer = NULL;
+    size_t buffer_size = 0;
+    size_t buffer_capacity = file_size * 2 + 1024; // Estimate needed capacity
     
-    // Write file header - use the full path
-    fprintf(config->output_file, "\n'''--- %s ---\n", file_path);
+    if (config->thread_pool) {
+        buffer = thread_local_buffer(config->thread_pool, buffer_capacity);
+    } else {
+        buffer = safe_malloc(buffer_capacity);
+    }
+    
+    // Write file header to buffer
+    buffer_size += snprintf(buffer + buffer_size, buffer_capacity - buffer_size, 
+                           "\n'''--- %s ---\n", file_path);
     
     // Check for binary content
     if (file_size > 0 && is_binary_data(file_data, file_size)) {
-        fprintf(config->output_file, "[Binary file - contents omitted]\n'''\n");
-        pthread_mutex_unlock(&config->output_mutex);
-        
-        if (file_data != MAP_FAILED) {
-            munmap(file_data, file_size);
-        }
-        close(fd);
-        free(path_copy);
-        return 1;
-    }
-    
-    // Process and write file content
-    if (file_size > 0) {
-        const unsigned char *data = (const unsigned char *)file_data;
-        
-        for (size_t i = 0; i < file_size; i++) {
-            if (data[i] >= 32 && data[i] <= 126) { // ASCII printable
-                fputc(data[i], config->output_file);
-            } else if (data[i] == '\n' || data[i] == '\r' || data[i] == '\t') {
-                fputc(data[i], config->output_file); // Control characters
-            } else {
-                fputs("�", config->output_file); // Single replacement character
+        buffer_size += snprintf(buffer + buffer_size, buffer_capacity - buffer_size, 
+                               "[Binary file - contents omitted]\n'''\n");
+    } else {
+        // Process and write file content to buffer
+        if (file_size > 0) {
+            const unsigned char *data = (const unsigned char *)file_data;
+            
+            for (size_t i = 0; i < file_size && buffer_size < buffer_capacity - 10; i++) {
+                if (data[i] >= 32 && data[i] <= 126) { // ASCII printable
+                    buffer[buffer_size++] = data[i];
+                } else if (data[i] == '\n' || data[i] == '\r' || data[i] == '\t') {
+                    buffer[buffer_size++] = data[i]; // Control characters
+                } else {
+                    // Single replacement character (UTF-8)
+                    buffer[buffer_size++] = '�';
+                }
             }
+            buffer[buffer_size] = '\0'; // Ensure null termination
         }
+        
+        // Add closing marker
+        buffer_size += snprintf(buffer + buffer_size, buffer_capacity - buffer_size, "\n'''\n");
     }
     
-    fprintf(config->output_file, "\n'''\n");
-    
-    // Unlock the mutex
+    // Now lock the mutex only for the actual file write
+    pthread_mutex_lock(&config->output_mutex);
+    fputs(buffer, config->output_file);
     pthread_mutex_unlock(&config->output_mutex);
+    
+    // Free buffer if not thread-local
+    if (!config->thread_pool) {
+        free(buffer);
+    }
     
     // Clean up
     if (file_data != MAP_FAILED) {
@@ -1224,12 +1236,20 @@ void init_thread_pool(ScrapeConfig *config) {
     // Allocate thread pool
     ThreadPool *pool = safe_calloc(1, sizeof(ThreadPool));
     
-    // Initialize mutex and condition variables
-    pthread_mutex_init(&pool->queue_mutex, NULL);
+    // Initialize mutex and condition variables with performance-optimized attributes
+    pthread_mutexattr_t mutex_attr;
+    pthread_mutexattr_init(&mutex_attr);
+    // Use adaptive mutex for better performance under contention
+    #ifdef PTHREAD_MUTEX_ADAPTIVE_NP
+    pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_ADAPTIVE_NP);
+    #endif
+    pthread_mutex_init(&pool->queue_mutex, &mutex_attr);
+    pthread_mutexattr_destroy(&mutex_attr);
+    
     pthread_cond_init(&pool->queue_cond, NULL);
     pthread_cond_init(&pool->finished_cond, NULL);
     
-    // Initialize thread-local storage for buffers
+    // Initialize thread-local storage for buffers with larger initial size
     pthread_key_create(&pool->thread_buffer_key, free_thread_local_buffer);
     
     // Create threads
@@ -1243,8 +1263,14 @@ void init_thread_pool(ScrapeConfig *config) {
         contexts[i].config = config;
     }
     
+    // Set thread attributes for better performance
+    pthread_attr_t thread_attr;
+    pthread_attr_init(&thread_attr);
+    // Use system scope for better scheduling
+    pthread_attr_setscope(&thread_attr, PTHREAD_SCOPE_SYSTEM);
+    
     for (size_t i = 0; i < pool->num_threads; i++) {
-        if (pthread_create(&pool->threads[i], NULL, worker_thread, &contexts[i]) != 0) {
+        if (pthread_create(&pool->threads[i], &thread_attr, worker_thread, &contexts[i]) != 0) {
             log_message(LOG_ERROR, "Failed to create worker thread %zu", i);
             // Continue with fewer threads
             pool->num_threads = i;
@@ -1252,6 +1278,7 @@ void init_thread_pool(ScrapeConfig *config) {
         }
     }
     
+    pthread_attr_destroy(&thread_attr);
     config->thread_pool = pool;
     
     log_message(LOG_INFO, "Created thread pool with %zu worker threads", pool->num_threads);
@@ -1301,24 +1328,17 @@ void add_work_item(ThreadPool *pool, FileEntry *file) {
     work->file = file;
     work->next = NULL;
     
-    // Add to queue
+    // Add to queue - use LIFO for better cache locality
     pthread_mutex_lock(&pool->queue_mutex);
     
-    if (pool->work_queue == NULL) {
-        pool->work_queue = work;
-    } else {
-        // Add to end of queue
-        WorkItem *last = pool->work_queue;
-        while (last->next) {
-            last = last->next;
-        }
-        last->next = work;
-    }
+    // Add to front of queue (LIFO) for better performance
+    work->next = pool->work_queue;
+    pool->work_queue = work;
     
     pool->queue_size++;
     
-    // Signal threads
-    pthread_cond_signal(&pool->queue_cond);
+    // Signal threads - wake all waiting threads for better responsiveness
+    pthread_cond_broadcast(&pool->queue_cond);
     
     pthread_mutex_unlock(&pool->queue_mutex);
 }
