@@ -20,8 +20,8 @@ TEST_DIR="test_output/threading_test_files"
 mkdir -p "$TEST_DIR"
 
 # Number of test files to create
-NUM_FILES=50  # Reduced for faster test runs
-FILE_SIZE=5000  # Characters per file
+NUM_FILES=200  # Increased for better thread utilization
+FILE_SIZE=50000  # Increased file size for more meaningful timing
 
 echo "Creating $NUM_FILES test files in $TEST_DIR..."
 
@@ -29,7 +29,8 @@ echo "Creating $NUM_FILES test files in $TEST_DIR..."
 for i in $(seq 1 $NUM_FILES); do
     # Create a file with random content
     FILE_PATH="$TEST_DIR/test_file_$i.txt"
-    head -c $FILE_SIZE /dev/urandom | tr -dc 'a-zA-Z0-9\n' > "$FILE_PATH"
+    # Use LC_ALL=C to avoid illegal byte sequence errors with tr
+    LC_ALL=C head -c $FILE_SIZE /dev/urandom | LC_ALL=C tr -dc 'a-zA-Z0-9\n' > "$FILE_PATH"
 done
 
 echo "Created $NUM_FILES test files"
@@ -46,14 +47,24 @@ run_thread_test() {
     
     echo "Running test with $threads threads..."
     
-    # Time the execution
-    start_time=$(date +%s.%N)
+    # Time the execution using time command for more accurate measurement
+    # Use /usr/bin/time for more consistent output format across systems
+    if command -v /usr/bin/time >/dev/null 2>&1; then
+        time_output=$( /usr/bin/time -p $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1 )
+        execution_time=$(echo "$time_output" | grep real | awk '{print $2}')
+    else
+        # Fall back to built-in time command
+        time_output=$( { time $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1; } 2>&1 )
+        execution_time=$(echo "$time_output" | grep real | awk '{print $2}' | sed 's/s//')
+    fi
     
-    # Run llm_globber with specified thread count
-    $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1
-    
-    end_time=$(date +%s.%N)
-    execution_time=$(echo "$end_time - $start_time" | bc)
+    # If time command didn't work as expected, fall back to date method
+    if [ -z "$execution_time" ]; then
+        start_time=$(date +%s.%N)
+        $LLM_GLOBBER -o "$output_dir" -n "$test_name" -t .txt -r -j "$threads" -u "$TEST_DIR" > /dev/null 2>&1
+        end_time=$(date +%s.%N)
+        execution_time=$(echo "$end_time - $start_time" | bc)
+    fi
     
     echo "Execution time with $threads threads: $execution_time seconds"
     TIMES[$threads]=$execution_time
@@ -83,20 +94,27 @@ for threads in "${THREAD_COUNTS[@]}"; do
     if ! run_thread_test $threads; then
         TEST_PASSED=false
     fi
+    # Sleep between tests to allow system to cool down
+    sleep 2
 done
 
 # Check if multi-threading provides performance improvement
 if [ "${#TIMES[@]}" -ge 2 ] && [ -n "${TIMES[1]}" ] && [ -n "${TIMES[4]}" ]; then
-    speedup=$(echo "${TIMES[1]} / ${TIMES[4]}" | bc -l)
-    echo "Speedup with 4 threads vs 1 thread: $speedup"
-    
-    # Expect at least some speedup (1.2x) with 4 threads
-    if (( $(echo "$speedup > 1.2" | bc -l) )); then
-        echo -e "${GREEN}✓ Multi-threading provides performance improvement${NC}"
+    # Avoid division by zero by checking if times are greater than zero
+    if (( $(echo "${TIMES[1]} > 0" | bc -l) )) && (( $(echo "${TIMES[4]} > 0" | bc -l) )); then
+        speedup=$(echo "${TIMES[1]} / ${TIMES[4]}" | bc -l)
+        echo "Speedup with 4 threads vs 1 thread: $speedup"
+        
+        # Expect at least some speedup (1.2x) with 4 threads
+        if (( $(echo "$speedup > 1.2" | bc -l) )); then
+            echo -e "${GREEN}✓ Multi-threading provides performance improvement${NC}"
+        else
+            echo -e "${RED}✗ Multi-threading does not provide significant performance improvement${NC}"
+            # Don't fail the test for this, as performance can vary by system
+            echo "This is not a test failure, just an observation."
+        fi
     else
-        echo -e "${RED}✗ Multi-threading does not provide significant performance improvement${NC}"
-        # Don't fail the test for this, as performance can vary by system
-        echo "This is not a test failure, just an observation."
+        echo "Execution times too small to calculate meaningful speedup"
     fi
 fi
 
