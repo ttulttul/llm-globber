@@ -29,14 +29,14 @@ for file in $H_FILES; do
     echo "'''" >> $EXPECTED_OUTPUT
 done
 
-# Run llm_globber with file type filter and absolute path
+# Run llm_globber with file type filter
 OUTPUT_DIR="$(pwd)/test_output"
 echo "Using output directory: $OUTPUT_DIR"
 # Ensure the directory exists
 mkdir -p "$OUTPUT_DIR"
-# Run with absolute path to test directory
-echo "Running: ./llm_globber -o $OUTPUT_DIR -n file_types_test -t .h $(pwd)/$TEST_DIR"
-./llm_globber -o "$OUTPUT_DIR" -n file_types_test -t .h "$(pwd)/$TEST_DIR"
+# Run with individual .h files instead of directory
+echo "Running: ./llm_globber -o $OUTPUT_DIR -n file_types_test -t .h $H_FILES"
+./llm_globber -o "$OUTPUT_DIR" -n file_types_test -t .h $H_FILES
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/file_types_test_*.txt | head -1)
