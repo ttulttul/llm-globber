@@ -343,54 +343,31 @@ int main(int argc, char *argv[]) {
     config.filter_files = 1; // Default to filtering files
     config.recursive = 0;    // Default to non-recursive
     
-    int name_arg_index = -1;
-    
-    // Pre-parse arguments to find special options like -name that are non-standard
-    for (int i = 1; i < argc - 1; i++) {
-        if (strcmp(argv[i], "-name") == 0) {
-            strncpy(config.name_pattern, argv[i+1], MAX_PATH_LEN - 1);
-            name_arg_index = i; // Remember where we found this
+    // Process all arguments manually to avoid getopt issues
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
+            strncpy(config.output_path, argv[i+1], MAX_PATH_LEN - 1);
             i++; // Skip the value
-        }
-    }
-    
-    // Use getopt to parse standard options
-    int c;
-    // Create a clean argv for getopt without the -name option and its value
-    char *getopt_argv[argc];
-    int getopt_argc = 0;
-    
-    for (int i = 0; i < argc; i++) {
-        if (i == name_arg_index || i == name_arg_index + 1) {
-            continue; // Skip the -name option and its value
-        }
-        getopt_argv[getopt_argc++] = argv[i];
-    }
-    
-    optind = 1; // Reset getopt
-    while ((c = getopt(getopt_argc, getopt_argv, "o:n:t:arh")) != -1) {
-        switch (c) {
-            case 'o':
-                strncpy(config.output_path, optarg, MAX_PATH_LEN - 1);
-                break;
-            case 'n':
-                strncpy(config.output_filename, optarg, MAX_PATH_LEN - 1);
-                break;
-            case 't':
-                parse_file_types(&config, optarg);
-                break;
-            case 'a':
-                config.filter_files = 0;
-                break;
-            case 'r':
-                config.recursive = 1;
-                break;
-            case 'h':
-                print_usage(argv[0]);
-                return 0;
-            default:
-                print_usage(argv[0]);
-                return 1;
+        } else if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
+            strncpy(config.output_filename, argv[i+1], MAX_PATH_LEN - 1);
+            i++; // Skip the value
+        } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
+            parse_file_types(&config, argv[i+1]);
+            i++; // Skip the value
+        } else if (strcmp(argv[i], "-a") == 0) {
+            config.filter_files = 0;
+        } else if (strcmp(argv[i], "-r") == 0) {
+            config.recursive = 1;
+        } else if (strcmp(argv[i], "-name") == 0 && i + 1 < argc) {
+            strncpy(config.name_pattern, argv[i+1], MAX_PATH_LEN - 1);
+            i++; // Skip the value
+        } else if (strcmp(argv[i], "-h") == 0) {
+            print_usage(argv[0]);
+            return 0;
+        } else if (argv[i][0] == '-') {
+            printf("Unknown option: %s\n", argv[i]);
+            print_usage(argv[0]);
+            return 1;
         }
     }
     
@@ -426,14 +403,19 @@ int main(int argc, char *argv[]) {
     char *all_files[MAX_FILES];
     int file_count = 0;
     
-    // Adjust optind to account for skipped -name arguments
-    int real_optind = optind;
-    if (name_arg_index >= 0 && name_arg_index < optind) {
-        real_optind += 2; // Add 2 to account for -name and its value
-    }
-    
     // Process each file or directory argument
-    for (int i = real_optind; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
+        // Skip options and their values
+        if (argv[i][0] == '-') {
+            if (strcmp(argv[i], "-o") == 0 || 
+                strcmp(argv[i], "-n") == 0 || 
+                strcmp(argv[i], "-t") == 0 || 
+                strcmp(argv[i], "-name") == 0) {
+                i++; // Skip the value
+            }
+            continue;
+        }
+        
         struct stat path_stat;
         if (stat(argv[i], &path_stat) != 0) {
             printf("Warning: Could not access path %s: %s\n", argv[i], strerror(errno));

@@ -35,6 +35,7 @@ echo "Using output directory: $OUTPUT_DIR"
 # Ensure the directory exists
 mkdir -p "$OUTPUT_DIR"
 # Run with absolute path to test directory
+echo "Running: ./llm_globber -o $OUTPUT_DIR -n recursive_test -t .c -r $(pwd)/$TEST_DIR"
 ./llm_globber -o "$OUTPUT_DIR" -n recursive_test -t .c -r "$(pwd)/$TEST_DIR"
 
 # Find the generated output file (most recent in the directory)
