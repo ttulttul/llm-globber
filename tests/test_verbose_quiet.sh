@@ -13,7 +13,7 @@ echo "Test content" > input/test.txt
 
 # Test verbose mode
 echo "Testing verbose mode..."
-../llm_globber -o output -n verbose_test -v input/test.txt > verbose_output.txt 2>&1
+../llm_globber -o output -n verbose_test -v input/test.txt 2> verbose_output.txt
 if ! grep -q "INFO:" verbose_output.txt; then
   echo "FAIL: Verbose mode should show INFO messages"
   exit 1
@@ -26,7 +26,7 @@ echo "Verbose mode test passed"
 
 # Test quiet mode
 echo "Testing quiet mode..."
-../llm_globber -o output -n quiet_test -q input/test.txt > quiet_output.txt 2>&1
+../llm_globber -o output -n quiet_test -q input/test.txt 2> quiet_output.txt
 if [ -s quiet_output.txt ]; then
   echo "FAIL: Quiet mode should not produce any output"
   cat quiet_output.txt
@@ -36,7 +36,7 @@ echo "Quiet mode test passed"
 
 # Test default mode (should show warnings and errors, but not info or debug)
 echo "Testing default mode..."
-../llm_globber -o output -n default_test input/test.txt > default_output.txt 2>&1
+../llm_globber -o output -n default_test input/test.txt 2> default_output.txt
 if grep -q "INFO:" default_output.txt; then
   echo "FAIL: Default mode should not show INFO messages"
   exit 1
