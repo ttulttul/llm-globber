@@ -27,7 +27,8 @@ echo "" >> $EXPECTED_OUTPUT
 echo "'''" >> $EXPECTED_OUTPUT
 
 # Run llm_globber with absolute path to ensure it works
-./llm_globber -o $(pwd)/test_output -n basic_test $TEST_FILES
+OUTPUT_DIR="$(pwd)/test_output"
+./llm_globber -o "$OUTPUT_DIR" -n basic_test $TEST_FILES
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/basic_test_*.txt | head -1)

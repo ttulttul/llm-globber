@@ -30,7 +30,8 @@ for file in $C_FILES; do
 done
 
 # Run llm_globber with recursive option and absolute path
-./llm_globber -o $(pwd)/test_output -n recursive_test -t .c -r $TEST_DIR
+OUTPUT_DIR="$(pwd)/test_output"
+./llm_globber -o "$OUTPUT_DIR" -n recursive_test -t .c -r $TEST_DIR
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/recursive_test_*.txt | head -1)

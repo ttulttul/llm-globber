@@ -30,7 +30,8 @@ for file in $H_FILES; do
 done
 
 # Run llm_globber with file type filter and absolute path
-./llm_globber -o $(pwd)/test_output -n file_types_test -t .h $TEST_DIR
+OUTPUT_DIR="$(pwd)/test_output"
+./llm_globber -o "$OUTPUT_DIR" -n file_types_test -t .h $TEST_DIR
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/file_types_test_*.txt | head -1)
