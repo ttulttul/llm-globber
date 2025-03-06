@@ -956,12 +956,14 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
     char *base_name = basename(path_copy);
     
     // Check if this is a dot file
-    if (base_name[0] == '.' && config->no_dot_files) {
-        log_message(LOG_DEBUG, "Skipping dot file: %s", file_path);
-        free(path_copy);
-        return 0;
-    } else if (base_name[0] == '.') {
-        log_message(LOG_WARN, "Processing dot file which may contain secrets: %s", file_path);
+    if (base_name[0] == '.') {
+        if (config->no_dot_files) {
+            log_message(LOG_DEBUG, "Skipping dot file: %s", file_path);
+            free(path_copy);
+            return 0;
+        } else {
+            log_message(LOG_WARN, "Including dot file: %s", file_path);
+        }
     }
     
     // Open the file
@@ -1063,12 +1065,14 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     char *base_name = basename(path_copy);
     
     // Check if this is a dot file
-    if (base_name[0] == '.' && config->no_dot_files) {
-        log_message(LOG_DEBUG, "Skipping dot file: %s", file_path);
-        free(path_copy);
-        return 0;
-    } else if (base_name[0] == '.') {
-        log_message(LOG_WARN, "Processing dot file which may contain secrets: %s", file_path);
+    if (base_name[0] == '.') {
+        if (config->no_dot_files) {
+            log_message(LOG_DEBUG, "Skipping dot file: %s", file_path);
+            free(path_copy);
+            return 0;
+        } else {
+            log_message(LOG_WARN, "Including dot file: %s", file_path);
+        }
     }
     
     // Open file

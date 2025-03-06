@@ -25,7 +25,8 @@ mkdir -p "$OUTPUT_DIR"
 
 # Capture both stdout and stderr
 # Use -u flag to disable sandbox mode for testing
-OUTPUT=$(../llm_globber -o "$OUTPUT_DIR" -n dotfile_test -a -r -u "$TEST_DIR" 2>&1)
+# Use -d flag to include dot files
+OUTPUT=$(../llm_globber -o "$OUTPUT_DIR" -n dotfile_test -a -r -u -d "$TEST_DIR" 2>&1)
 echo "$OUTPUT"  # Display the output for debugging
 
 # Check if warning was generated
