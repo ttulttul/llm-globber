@@ -16,7 +16,7 @@ clean:
 	rm -f $(OBJS) $(TARGET)
 
 test: $(TARGET)
-	chmod +x test_llm_globber.sh
+	chmod +x test_llm_globber.sh test_basic.sh test_recursive.sh test_file_types.sh test_name_pattern.sh test_dotfiles.sh
 	./test_llm_globber.sh
 
 .PHONY: all clean test
