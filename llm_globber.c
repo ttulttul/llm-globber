@@ -432,6 +432,13 @@ void add_repo_path(ScrapeConfig *config, const char *path) {
 void add_file_entry(ScrapeConfig *config, const char *path) {
     if (!config || !path) return;
 
+    // Check file size limit
+    size_t size = get_file_size(path);
+    if (size > config->max_file_size) {
+        log_message(LOG_WARN, "Skipping large file: %s (%zu bytes)", path, size);
+        return;
+    }
+
     // Allocate or expand the file entries array
     if (config->file_entries == NULL) {
         config->file_entries = safe_calloc(MAX_FILES, sizeof(FileEntry));
@@ -1058,13 +1065,7 @@ void process_directory(ScrapeConfig *config, const char *dir_path) {
 
             // Add the file if it passed all filters
             if (include_file) {
-                size_t size = get_file_size(full_path);
-                if (size <= config->max_file_size) {
-                    add_file_entry(config, full_path);
-                } else {
-                    log_message(LOG_WARN, "Skipping large file: %s (%zu bytes)",
-                              full_path, size);
-                }
+                add_file_entry(config, full_path);
             }
         }
     }
@@ -1368,10 +1369,7 @@ int main(int argc, char *argv[]) {
                 char *path_copy = safe_strdup(argv[i]);
                 char *base_name = basename(path_copy);
                 if (fnmatch(config.name_pattern, base_name, 0) == 0) {
-                    size_t size = get_file_size(argv[i]);
-                    if (size <= config.max_file_size) {
-                        add_file_entry(&config, argv[i]);
-                    }
+                    add_file_entry(&config, argv[i]);
                 }
                 free(path_copy);
             } else {
