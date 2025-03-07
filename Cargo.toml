@@ -11,5 +11,5 @@ clap = { version = "3.1", features = ["derive"] } # Or a more recent version
 glob = "0.3" # Or a more recent version
 log = "0.4" # Or a more recent version
 memmap2 = "0.5" # Or a more recent version
-simplelog = "5.0" # Or a more recent version
+simplelog = "0.12" # Using a more recent version that's available
 chrono = "0.4" # Or a more recent version
