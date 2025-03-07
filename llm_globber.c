@@ -1123,12 +1123,6 @@ void process_directory(ScrapeConfig *config, const char *dir_path) {
         return;
     }
 
-    DIR *dir = opendir(dir_path);
-    if (!dir) {
-        log_message(LOG_ERROR, "Error opening directory %s: %s", dir_path, strerror(errno));
-        return;
-    }
-
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL && !g_interrupted) {
         // Skip . and ..
