@@ -1,10 +1,6 @@
-use std::collections::hash_map::DefaultHasher;
-use std::env;
-use std::ffi::{CStr, CString};
-use std::fs::{self, File, OpenOptions};
-use std::hash::{Hash, Hasher};
+use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
-use std::os::unix::fs::{chown, PermissionsExt};
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str;
@@ -151,7 +147,7 @@ impl Default for ScrapeConfig {
     }
 }
 
-fn run_scraper(mut config: ScrapeConfig) -> Result<String, String> {
+fn run_scraper(mut config: &mut ScrapeConfig) -> Result<String, String> {
     print_header("Starting LLM Globber File Processing");
     info!("Starting file processing...");
 
@@ -178,7 +174,7 @@ fn run_scraper(mut config: ScrapeConfig) -> Result<String, String> {
 
     let mut files_processed = 0;
     for (i, file_entry) in config.file_entries.iter().enumerate() {
-        if process_file(&config, &file_entry.path).is_ok() {
+        if process_file(&mut config, &file_entry.path).is_ok() {
             files_processed += 1;
             config.processed_files = files_processed;
         } else {
@@ -235,7 +231,10 @@ fn clean_up_text(filename: &str, max_consecutive_newlines: usize) -> io::Result<
 
     let temp_filename = format!("{}.tmp", filename);
     let temp_file = File::create(&temp_filename)?;
-    set_secure_file_permissions(&PathBuf::from(&temp_filename))?;
+    // Handle the error manually instead of using ?
+    if let Err(e) = set_secure_file_permissions(&PathBuf::from(&temp_filename)) {
+        return Err(io::Error::new(io::ErrorKind::PermissionDenied, e));
+    }
     let mut writer = BufWriter::new(temp_file);
 
     let mut consecutive_newlines = 0;
@@ -293,9 +292,11 @@ fn print_usage(program_name: &str) {
 }
 
 fn process_directory(config: &mut ScrapeConfig, dir_path: &str) -> Result<(), String> {
-    let entries = fs::read_dir(dir_path)?;
+    let entries = fs::read_dir(dir_path)
+        .map_err(|e| format!("Failed to read directory {}: {}", dir_path, e))?;
     for entry_result in entries {
-        let entry = entry_result?;
+        let entry = entry_result
+            .map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let full_path = entry.path();
         let file_name = entry.file_name();
         let file_name_str = file_name.to_string_lossy();
@@ -444,12 +445,14 @@ fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) 
 }
 
 fn glob_match(pattern: &str, name: &str) -> Result<bool, glob::GlobError> {
-    let pattern = Pattern::new(pattern).map_err(|e| glob::GlobError::from_error(e.msg, e.pos))?;
+    let pattern = Pattern::new(pattern)
+        .map_err(|e| glob::GlobError::new(format!("Pattern error: {}", e)))?;
     Ok(pattern.matches(name))
 }
 
 fn _glob_match_alt(pattern: &str, name: &str) -> Result<bool, glob::GlobError> {
-    for path in glob(pattern).map_err(|e| glob::GlobError::from_error(e.msg, e.pos))? {
+    for path in glob(pattern)
+        .map_err(|e| glob::GlobError::new(format!("Pattern error: {}", e)))? {
         match path {
             Ok(p) => {
                 if p.file_name().and_then(|s| s.to_str()) == Some(name) {
@@ -680,7 +683,7 @@ fn main() -> Result<(), String> {
         .get_matches();
 
     if matches.is_present("help") {
-        print_usage(&matches.get_name().unwrap_or("llm_globber"));
+        print_usage("llm_globber");
         exit(0);
     }
 
@@ -775,7 +778,7 @@ fn main() -> Result<(), String> {
     }
 
 
-    match run_scraper(config) {
+    match run_scraper(&mut config) {
         Ok(output_file) => {
             if matches.is_present("verbose") {
                 debug_dump_file(&output_file).map_err(|e| format!("Debug dump failed: {}", e))?;
