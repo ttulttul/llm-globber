@@ -575,7 +575,7 @@ fn main() -> Result<(), String> {
 
     let matches = App::new("llm_globber")
         .version("0.1.0")
-        .author("Your Name")
+        .author("Ken Simpson")
         .about("Collects and formats files for LLMs")
         .arg(
             Arg::with_name("output_path")
