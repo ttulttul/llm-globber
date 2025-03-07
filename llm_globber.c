@@ -141,7 +141,6 @@ int is_allowed_file_type(ScrapeConfig *config, const char *file_path);
 void signal_handler(int signo);
 void setup_signal_handlers();
 void print_progress(ScrapeConfig *config);
-int is_safe_path(ScrapeConfig *config, const char *path);
 void set_resource_limits();
 void init_locale();
 int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_size); // Now only one process_file_mmap
