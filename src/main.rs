@@ -173,8 +173,11 @@ fn run_scraper(mut config: &mut ScrapeConfig) -> Result<String, String> {
     config.output_file = Some(BufWriter::with_capacity(IO_BUFFER_SIZE, output_file));
 
     let mut files_processed = 0;
-    for (i, file_entry) in config.file_entries.iter().enumerate() {
-        if process_file(&mut config, &file_entry.path).is_ok() {
+    // Create a copy of the paths to avoid borrowing issues
+    let file_paths: Vec<String> = config.file_entries.iter().map(|entry| entry.path.clone()).collect();
+    
+    for (i, file_path) in file_paths.iter().enumerate() {
+        if process_file(config, file_path).is_ok() {
             files_processed += 1;
             config.processed_files = files_processed;
         } else {
@@ -197,7 +200,7 @@ fn run_scraper(mut config: &mut ScrapeConfig) -> Result<String, String> {
 
     let elapsed = config.start_time.elapsed().as_secs_f64();
 
-    let mut output_file_path_str = output_file_path.display().to_string();
+    let output_file_path_str = output_file_path.display().to_string();
 
     if !output_file_path_str.contains("basic_test") {
         info!("Cleaning up file...");
@@ -432,7 +435,14 @@ fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) 
     }
 
     if !config.name_pattern.is_empty() {
-        if let Ok(false) = glob_match(&config.name_pattern, base_name) {
+        match glob_match(&config.name_pattern, base_name) {
+            Ok(false) => return false,
+            Err(e) => {
+                warn!("Pattern matching error: {}", e);
+                return false;
+            },
+            _ => {}
+        }
             return false;
         }
     }
@@ -444,15 +454,15 @@ fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) 
     true
 }
 
-fn glob_match(pattern: &str, name: &str) -> Result<bool, glob::GlobError> {
+fn glob_match(pattern: &str, name: &str) -> Result<bool, String> {
     let pattern = Pattern::new(pattern)
-        .map_err(|e| glob::GlobError::new(format!("Pattern error: {}", e)))?;
+        .map_err(|e| format!("Pattern error: {}", e))?;
     Ok(pattern.matches(name))
 }
 
-fn _glob_match_alt(pattern: &str, name: &str) -> Result<bool, glob::GlobError> {
+fn _glob_match_alt(pattern: &str, name: &str) -> Result<bool, String> {
     for path in glob(pattern)
-        .map_err(|e| glob::GlobError::new(format!("Pattern error: {}", e)))? {
+        .map_err(|e| format!("Pattern error: {}", e))? {
         match path {
             Ok(p) => {
                 if p.file_name().and_then(|s| s.to_str()) == Some(name) {
