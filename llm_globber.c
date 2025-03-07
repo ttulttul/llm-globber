@@ -577,7 +577,8 @@ size_t get_file_size(const char *path) {
 }
 
 // Check if the path is safe to access - always returns 1 now
-int is_safe_path(ScrapeConfig *config, const char *path) {
+int is_safe_path(ScrapeConfig *config __attribute__((unused)), 
+                const char *path __attribute__((unused))) {
     return 1;
 }
 
