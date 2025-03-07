@@ -363,7 +363,7 @@ int init_config(ScrapeConfig *config) {
     config->num_threads = DEFAULT_NUM_THREADS; // Always 1 now
     config->abort_on_error = 0;
     config->show_progress = 1;
-    config->thread_mode = 0; // Always sequential
+    // thread_mode removed - always sequential now
 
     // Initialize mutex
     if (pthread_mutex_init(&config->output_mutex, NULL) != 0) {
