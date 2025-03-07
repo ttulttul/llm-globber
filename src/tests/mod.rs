@@ -30,18 +30,30 @@ mod tests {
         let test_dir = temp_dir.path();
         
         // Create test files
-        let files = create_test_files(test_dir);
+        let _files = create_test_files(test_dir);
         
         // Create output directory
         let output_dir = temp_dir.path().join("output");
         fs::create_dir(&output_dir).unwrap();
         
-        // Find the path to the executable
-        let executable_path = std::env::current_exe()
-            .expect("Failed to get current executable path")
-            .parent()
-            .expect("Failed to get parent directory")
+        // Build the executable first
+        let status = Command::new("cargo")
+            .args(["build", "--release"])
+            .status()
+            .expect("Failed to build llm_globber");
+            
+        assert!(status.success(), "Failed to build llm_globber");
+        
+        // Find the path to the executable in the target/release directory
+        let executable_path = std::env::current_dir()
+            .expect("Failed to get current directory")
+            .join("target")
+            .join("release")
             .join("llm_globber");
+            
+        assert!(executable_path.exists(), 
+                "Executable not found at: {}", 
+                executable_path.display());
             
         // Run llm_globber with name pattern filter
         let output = Command::new(executable_path)
