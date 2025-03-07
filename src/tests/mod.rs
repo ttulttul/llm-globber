@@ -36,8 +36,15 @@ mod tests {
         let output_dir = temp_dir.path().join("output");
         fs::create_dir(&output_dir).unwrap();
         
+        // Find the path to the executable
+        let executable_path = std::env::current_exe()
+            .expect("Failed to get current executable path")
+            .parent()
+            .expect("Failed to get parent directory")
+            .join("llm_globber");
+            
         // Run llm_globber with name pattern filter
-        let output = Command::new(env!("CARGO_BIN_EXE_llm_globber"))
+        let output = Command::new(executable_path)
             .args([
                 "-o", output_dir.to_str().unwrap(),
                 "-n", "name_pattern_test",
