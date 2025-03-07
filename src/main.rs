@@ -619,6 +619,7 @@ fn main() -> Result<(), String> {
         )
         .arg(
             Arg::with_name("name_pattern")
+                .short('n')
                 .long("name")
                 .value_name("PATTERN")
                 .help("Filter files by name pattern (glob syntax, e.g., '*.c')")

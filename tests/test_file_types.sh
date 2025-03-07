@@ -39,6 +39,9 @@ mkdir -p "$OUTPUT_DIR"
 echo "Running: ../target/release/llm_globber -o $OUTPUT_DIR -n file_types_test -t .h -u $H_FILES"
 ../target/release/llm_globber -o "$OUTPUT_DIR" -n file_types_test -t .h -u $H_FILES
 
+# Wait a moment to ensure file is written
+sleep 1
+
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/file_types_test_*.txt | head -1)
 
