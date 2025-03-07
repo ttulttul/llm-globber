@@ -1369,7 +1369,7 @@ int main(int argc, char *argv[]) {
                 char *base_name = basename(path_copy);
                 if (fnmatch(config.name_pattern, base_name, 0) == 0) {
                     size_t size = get_file_size(argv[i]);
-                    if (size <= config->max_file_size) {
+                    if (size <= config.max_file_size) {
                         add_file_entry(&config, argv[i]);
                     }
                 }
