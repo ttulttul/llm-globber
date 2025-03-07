@@ -418,9 +418,13 @@ fn process_file_mmap(config: &mut ScrapeConfig, file_path: &str, _file_size: u64
 
 
 fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) -> bool {
-    if base_name.starts_with('.') && config.no_dot_files {
-        debug!("Skipping dot file: {}", file_path);
-        return false;
+    if base_name.starts_with('.') {
+        if config.no_dot_files {
+            debug!("Skipping dot file: {}", file_path);
+            return false;
+        } else {
+            warn!("Including dot file: {}", file_path);
+        }
     }
 
     if let Ok(file_size) = get_file_size(file_path) {
