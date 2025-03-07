@@ -26,7 +26,7 @@ const IO_BUFFER_SIZE: usize = 1 << 18; // 256KB
 const DEFAULT_MAX_FILE_SIZE: u64 = 1 << 30; // 1GB
 const HASH_TABLE_SIZE: usize = 128;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 enum LogLevel {
     Error,
     Warn,
@@ -293,7 +293,7 @@ fn print_usage(program_name: &str) {
     println!("  -h             Show this help message");
 }
 
-fn process_directory(config: &mut ScrapeConfig, dir_path: &str) -> io::Result<()> {
+fn process_directory(config: &mut ScrapeConfig, dir_path: &str) -> Result<(), String> {
     let entries = fs::read_dir(dir_path)?;
     for entry_result in entries {
         let entry = entry_result?;
@@ -388,9 +388,10 @@ fn is_allowed_file_type(config: &ScrapeConfig, file_path: &str) -> bool {
     }
 }
 
-fn set_secure_file_permissions(path: &PathBuf) -> io::Result<()> {
+fn set_secure_file_permissions(path: &PathBuf) -> Result<(), String> {
     let permissions = fs::Permissions::from_mode(0o600);
-    fs::set_permissions(path, permissions)?;
+    fs::set_permissions(path, permissions)
+        .map_err(|e| format!("Failed to set permissions: {}", e))?;
     Ok(())
 }
 
@@ -402,7 +403,7 @@ fn sanitize_path(path: &str) -> io::Result<String> {
 }
 
 
-fn process_file_mmap(config: &ScrapeConfig, file_path: &str, file_size: u64) -> io::Result<()> {
+fn process_file_mmap(config: &mut ScrapeConfig, file_path: &str, _file_size: u64) -> io::Result<()> {
     let file = File::open(file_path)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
 
@@ -444,7 +445,12 @@ fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) 
 }
 
 fn glob_match(pattern: &str, name: &str) -> Result<bool, glob::GlobError> {
-    for path in glob(pattern)? {
+    let pattern = Pattern::new(pattern).map_err(|e| glob::GlobError::from_error(e.msg, e.pos))?;
+    Ok(pattern.matches(name))
+}
+
+fn _glob_match_alt(pattern: &str, name: &str) -> Result<bool, glob::GlobError> {
+    for path in glob(pattern).map_err(|e| glob::GlobError::from_error(e.msg, e.pos))? {
         match path {
             Ok(p) => {
                 if p.file_name().and_then(|s| s.to_str()) == Some(name) {
@@ -458,7 +464,7 @@ fn glob_match(pattern: &str, name: &str) -> Result<bool, glob::GlobError> {
 }
 
 
-fn write_file_content(config: &ScrapeConfig, file_path: &str, data: &[u8], is_binary: bool) -> io::Result<()> {
+fn write_file_content(config: &mut ScrapeConfig, file_path: &str, data: &[u8], is_binary: bool) -> io::Result<()> {
     let _lock = config.output_mutex.lock().unwrap(); // Acquire mutex lock
 
     if let Some(output_file) = &mut config.output_file {
@@ -479,7 +485,7 @@ fn write_file_content(config: &ScrapeConfig, file_path: &str, data: &[u8], is_bi
 }
 
 
-fn process_file(config: &ScrapeConfig, file_path: &str) -> io::Result<()> {
+fn process_file(config: &mut ScrapeConfig, file_path: &str) -> io::Result<()> {
     if !is_regular_file(file_path) {
         warn!("Skipping invalid file path: {}", file_path);
         return Ok(());
@@ -562,7 +568,7 @@ fn main() -> Result<(), String> {
         .about("Collects and formats files for LLMs")
         .arg(
             Arg::with_name("output_path")
-                .short("o")
+                .short('o')
                 .long("output")
                 .value_name("PATH")
                 .help("Output directory path")
@@ -570,7 +576,7 @@ fn main() -> Result<(), String> {
         )
         .arg(
             Arg::with_name("output_name")
-                .short("n")
+                .short('n')
                 .long("name")
                 .value_name("NAME")
                 .help("Output filename (without extension)")
@@ -578,7 +584,7 @@ fn main() -> Result<(), String> {
         )
         .arg(
             Arg::with_name("file_types")
-                .short("t")
+                .short('t')
                 .long("types")
                 .value_name("TYPES")
                 .help("File types to include (comma separated, e.g., '.c,.h,.txt')")
@@ -586,13 +592,13 @@ fn main() -> Result<(), String> {
         )
         .arg(
             Arg::with_name("all_files")
-                .short("a")
+                .short('a')
                 .long("all")
                 .help("Include all files (no filtering by type)"),
         )
         .arg(
             Arg::with_name("recursive")
-                .short("r")
+                .short('r')
                 .long("recursive")
                 .help("Recursively process directories"),
         )
@@ -605,7 +611,7 @@ fn main() -> Result<(), String> {
         )
         .arg(
             Arg::with_name("threads")
-                .short("j")
+                .short('j')
                 .long("threads")
                 .value_name("THREADS")
                 .help("[Deprecated] Number of worker threads (always 1)")
@@ -613,54 +619,54 @@ fn main() -> Result<(), String> {
         )
         .arg(
             Arg::with_name("max_size")
-                .short("s")
+                .short('s')
                 .long("size")
                 .value_name("SIZE_MB")
-                .help(&format!(
+                .help(format!(
                     "Maximum file size in MB (default: {})",
                     DEFAULT_MAX_FILE_SIZE / (1024 * 1024)
-                ))
+                ).as_str())
                 .takes_value(true),
         )
         .arg(
             Arg::with_name("dot_files")
-                .short("d")
+                .short('d')
                 .long("dot")
                 .help("Include dot files (hidden files)"),
         )
         .arg(
             Arg::with_name("progress")
-                .short("p")
+                .short('p')
                 .long("progress")
                 .help("Show progress indicators"),
         )
         .arg(
             Arg::with_name("deprecated_u")
-                .short("u")
+                .short('u')
                 .long("deprecated_u")
                 .hidden(true) //Just to acknowledge and ignore the option
         )
         .arg(
             Arg::with_name("abort_on_error")
-                .short("e")
+                .short('e')
                 .long("abort-on-error")
                 .help("Abort on errors (default is to continue)"),
         )
         .arg(
             Arg::with_name("verbose")
-                .short("v")
+                .short('v')
                 .long("verbose")
                 .help("Verbose output"),
         )
         .arg(
             Arg::with_name("quiet")
-                .short("q")
+                .short('q')
                 .long("quiet")
                 .help("Quiet mode (suppress all output)"),
         )
         .arg(
             Arg::with_name("help")
-                .short("h")
+                .short('h')
                 .long("help")
                 .help("Show this help message"),
         )
@@ -675,7 +681,7 @@ fn main() -> Result<(), String> {
         .get_matches();
 
     if matches.is_present("help") {
-        print_usage(matches.program());
+        print_usage(&matches.get_name().unwrap_or("llm_globber"));
         exit(0);
     }
 
@@ -746,7 +752,8 @@ fn main() -> Result<(), String> {
 
         if input_path.is_dir() {
             if config.recursive {
-                process_directory(&mut config, &input_path_str)?;
+                process_directory(&mut config, &input_path_str)
+                    .map_err(|e| format!("Error processing directory {}: {}", input_path_str, e))?;
             } else {
                 warn!(
                     "{} is a directory. Use -r to process recursively.",
