@@ -12,10 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{App, Arg};
-use glob::glob;
-use log::{debug, error, info, LevelFilter, Log, Metadata, Record, SetLoggerError};
-use memmap2::{Mmap, MmapOptions};
-use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
+use glob::{glob, Pattern};
+use log::{debug, error, info, warn, LevelFilter, Log, Metadata, Record, SetLoggerError};
+use memmap2::MmapOptions;
 
 const MAX_PATH_LEN: usize = 4096; // PATH_MAX in C
 const MAX_FILES: usize = 100000;
