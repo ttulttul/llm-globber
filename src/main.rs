@@ -17,6 +17,7 @@ const IO_BUFFER_SIZE: usize = 1 << 18; // 256KB
 const DEFAULT_MAX_FILE_SIZE: u64 = 1 << 30; // 1GB
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[allow(dead_code)]
 enum LogLevel {
     Error = 0,
     Warn = 1,
