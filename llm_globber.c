@@ -33,7 +33,6 @@
 #define IO_BUFFER_SIZE (1 << 18)       // 256KB IO buffer for faster reads/writes
 #define DEFAULT_MAX_FILE_SIZE (1ULL << 30) // 1GB default file size limit
 #define DEFAULT_NUM_THREADS 1          // Default number of worker threads (now always 1)
-#define MAX_NUM_THREADS 1             // Maximum number of threads allowed (now always 1)
 #define HASH_TABLE_SIZE 128            // Size of file type hash table
 
 // Exit codes
@@ -94,7 +93,6 @@ typedef struct ScrapeConfig {
     int processed_files;       // Counter for processed files
     int failed_files;          // Counter for failed files
     struct timeval start_time; // Start time for progress reporting
-    int thread_mode;          // 1 if running in thread pool, 0 for sequential - Always 0 now
 } ScrapeConfig;
 
 // Global variables
@@ -104,13 +102,6 @@ static int g_quiet_mode = 0;            // Global quiet mode flag
 static pthread_mutex_t g_log_mutex = PTHREAD_MUTEX_INITIALIZER; // Mutex for logging
 
 // Function prototypes
-// Compare function for sorting files by size (largest first)
-int compare_file_entries_by_size(const void *a, const void *b) {
-    const FileEntry *fa = (const FileEntry *)a;
-    const FileEntry *fb = (const FileEntry *)b;
-    // Return positive if b > a, negative if b < a, 0 if equal
-    return (fb->size > fa->size) - (fb->size < fa->size);
-}
 
 char* run_scraper(ScrapeConfig *config);
 int ends_with(const char *str, const char *suffix);
@@ -149,7 +140,6 @@ int set_secure_file_permissions(const char *path);
 int join_path(char *dest, size_t dest_size, const char *dir, const char *file);
 void strip_trailing_slash(char *path);
 char* get_absolute_path(const char *path);
-int validate_utf8(const char *str, size_t len);
 void print_header(const char *msg);
 void debug_dump_file(const char *filename);
 
@@ -683,59 +673,6 @@ int is_binary_file(const char *path) {
 }
 
 // Validate UTF-8 encoding
-int validate_utf8(const char *str, size_t len) {
-    if (!str) return 0;
-
-    const unsigned char *bytes = (const unsigned char *)str;
-    size_t i = 0;
-
-    while (i < len) {
-        if (bytes[i] <= 0x7F) {
-            // Single byte ASCII
-            i++;
-        } else if (bytes[i] >= 0xC2 && bytes[i] <= 0xDF) {
-            // 2-byte sequence
-            if (i + 1 >= len || (bytes[i+1] & 0xC0) != 0x80)
-                return 0;
-            i += 2;
-        } else if (bytes[i] == 0xE0) {
-            // 3-byte sequence (special case)
-            if (i + 2 >= len || (bytes[i+1] & 0xE0) != 0xA0 ||
-                (bytes[i+2] & 0xC0) != 0x80)
-                return 0;
-            i += 3;
-        } else if (bytes[i] >= 0xE1 && bytes[i] <= 0xEF) {
-            // 3-byte sequence
-            if (i + 2 >= len || (bytes[i+1] & 0xC0) != 0x80 ||
-                (bytes[i+2] & 0xC0) != 0x80)
-                return 0;
-            i += 3;
-        } else if (bytes[i] == 0xF0) {
-            // 4-byte sequence (special case)
-            if (i + 3 >= len || (bytes[i+1] & 0xF0) != 0x90 ||
-                (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
-                return 0;
-            i += 4;
-        } else if (bytes[i] >= 0xF1 && bytes[i] <= 0xF3) {
-            // 4-byte sequence
-            if (i + 3 >= len || (bytes[i+1] & 0xC0) != 0x80 ||
-                (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
-                return 0;
-            i += 4;
-        } else if (bytes[i] == 0xF4) {
-            // 4-byte sequence (special case)
-            if (i + 3 >= len || (bytes[i+1] & 0xF0) != 0x80 ||
-                (bytes[i+2] & 0xC0) != 0x80 || (bytes[i+3] & 0xC0) != 0x80)
-                return 0;
-            i += 4;
-        } else {
-            // Invalid UTF-8 lead byte
-            return 0;
-        }
-    }
-
-    return 1;
-}
 
 // Check if a file is a dot file (starts with a dot)
 int is_dot_file(const char *file_path) {
@@ -1329,7 +1266,7 @@ void print_usage(const char *program_name) {
     printf("  -a             Include all files (no filtering by type)\n");
     printf("  -r             Recursively process directories\n");
     printf("  -name PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')\n");
-    printf("  -j THREADS     Number of worker threads (default: %d, always 1 now)\n", DEFAULT_NUM_THREADS); // Updated help message
+    printf("  -j THREADS     [Deprecated] Number of worker threads (always 1)\n"); // Updated help message
     printf("  -s SIZE        Maximum file size in MB (default: %d)\n",
            (int)(DEFAULT_MAX_FILE_SIZE / (1024 * 1024)));
     printf("  -d             Include dot files (hidden files)\n");
