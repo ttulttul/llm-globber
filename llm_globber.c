@@ -1,3 +1,6 @@
+// A pure C version for posterity.
+// This was the first version of the program, written almost entirely by LLMs.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
