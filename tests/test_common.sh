@@ -9,7 +9,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Path to the llm_globber executable
-LLM_GLOBBER="../llm_globber"
+LLM_GLOBBER="../target/release/llm_globber"
 
 # Setup test environment
 setup_test() {

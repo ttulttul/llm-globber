@@ -36,8 +36,8 @@ echo "Using output directory: $OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 # Run with absolute path to test directory
 # Use -u flag to disable sandbox mode for testing
-echo "Running: ../llm_globber -o $OUTPUT_DIR -n recursive_test -t .c -r -u $(pwd)/$TEST_DIR"
-../llm_globber -o "$OUTPUT_DIR" -n recursive_test -t .c -r -u "$(pwd)/$TEST_DIR"
+echo "Running: ../target/release/llm_globber -o $OUTPUT_DIR -n recursive_test -t .c -r -u $(pwd)/$TEST_DIR"
+../target/release/llm_globber -o "$OUTPUT_DIR" -n recursive_test -t .c -r -u "$(pwd)/$TEST_DIR"
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/recursive_test_*.txt | head -1)

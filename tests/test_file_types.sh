@@ -36,8 +36,8 @@ echo "Using output directory: $OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 # Run with individual .h files instead of directory
 # Use -u flag to disable sandbox mode for testing
-echo "Running: ../llm_globber -o $OUTPUT_DIR -n file_types_test -t .h -u $H_FILES"
-../llm_globber -o "$OUTPUT_DIR" -n file_types_test -t .h -u $H_FILES
+echo "Running: ../target/release/llm_globber -o $OUTPUT_DIR -n file_types_test -t .h -u $H_FILES"
+../target/release/llm_globber -o "$OUTPUT_DIR" -n file_types_test -t .h -u $H_FILES
 
 # Find the generated output file (most recent in the directory)
 ACTUAL_OUTPUT=$(ls -t test_output/file_types_test_*.txt | head -1)
