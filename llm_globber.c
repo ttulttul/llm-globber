@@ -576,12 +576,6 @@ size_t get_file_size(const char *path) {
     return (size_t)st.st_size;
 }
 
-// Check if the path is safe to access - always returns 1 now
-int is_safe_path(ScrapeConfig *config, const char *path) {
-    (void)config; // Suppress unused parameter warning
-    (void)path;   // Suppress unused parameter warning
-    return 1;
-}
 
 // Check if we have permission to access a file
 int secure_file_access(const char *path, int check_write) {
@@ -972,6 +966,12 @@ int process_file(ScrapeConfig *config, const char *file_path) {
         return 0;
     }
 
+    // Check if file exists and is readable
+    if (!is_regular_file(file_path)) {
+        log_message(LOG_WARN, "Skipping invalid file path: %s", file_path);
+        return 0;
+    }
+
     // Get file size
     size_t file_size = get_file_size(file_path);
     log_message(LOG_DEBUG, "Processing file %s: size %zu bytes", file_path, file_size);
@@ -1117,6 +1117,12 @@ void debug_dump_file(const char *filename) {
 // Process a directory recursively, collecting all matching files
 void process_directory(ScrapeConfig *config, const char *dir_path) {
     if (!config || !dir_path) return;
+
+    DIR *dir = opendir(dir_path);
+    if (!dir) {
+        log_message(LOG_ERROR, "Error opening directory %s: %s", dir_path, strerror(errno));
+        return;
+    }
 
     DIR *dir = opendir(dir_path);
     if (!dir) {
