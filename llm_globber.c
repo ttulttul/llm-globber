@@ -32,7 +32,6 @@
 #define INITIAL_BUFFER_SIZE (1 << 20)  // 1MB initial buffer size for better performance
 #define IO_BUFFER_SIZE (1 << 18)       // 256KB IO buffer for faster reads/writes
 #define DEFAULT_MAX_FILE_SIZE (1ULL << 30) // 1GB default file size limit
-#define DEFAULT_NUM_THREADS 1          // Default number of worker threads (now always 1)
 #define HASH_TABLE_SIZE 128            // Size of file type hash table
 
 // Exit codes
@@ -55,8 +54,6 @@ typedef enum {
 // File entry type for thread processing
 typedef struct {
     char* path;
-    size_t size;
-    int processed; // Not used anymore in sequential version, but kept for structure compatibility if needed
 } FileEntry;
 
 // Hash table entry for file extensions
@@ -84,7 +81,6 @@ typedef struct ScrapeConfig {
     int quiet;                 // Suppress all output flag
     int no_dot_files;          // 1 if dot files should be ignored
     size_t max_file_size;      // Maximum file size to process
-    int num_threads;           // Number of worker threads to use (always 1 now)
     FILE* output_file;         // Output file handle
     pthread_mutex_t output_mutex; // Mutex for synchronizing output file access (still used for sequential output)
     // ThreadPool* thread_pool;   // Thread pool for parallel processing - REMOVED
@@ -104,7 +100,6 @@ static pthread_mutex_t g_log_mutex = PTHREAD_MUTEX_INITIALIZER; // Mutex for log
 // Function prototypes
 
 char* run_scraper(ScrapeConfig *config);
-int ends_with(const char *str, const char *suffix);
 int clean_up_text(const char *filename, int max_consecutive_newlines);
 void parse_file_types(ScrapeConfig *config, const char *types_str);
 void print_usage(const char *program_name);
@@ -117,7 +112,7 @@ char* safe_strdup(const char *str);
 int is_directory(const char *path);
 int is_regular_file(const char *path);
 void add_repo_path(ScrapeConfig *config, const char *path);
-void add_file_entry(ScrapeConfig *config, const char *path, size_t size);
+void add_file_entry(ScrapeConfig *config, const char *path);
 void free_config(ScrapeConfig *config);
 int init_config(ScrapeConfig *config);
 int sanitize_path(char *path, size_t max_len);
@@ -135,7 +130,6 @@ void print_progress(ScrapeConfig *config);
 void set_resource_limits();
 void init_locale();
 int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_size); // Now only one process_file_mmap
-int secure_file_access(const char *path, int check_write);
 int set_secure_file_permissions(const char *path);
 int join_path(char *dest, size_t dest_size, const char *dir, const char *file);
 void strip_trailing_slash(char *path);
@@ -360,7 +354,6 @@ int init_config(ScrapeConfig *config) {
     config->quiet = 0;
     config->no_dot_files = 1;  // Default to ignoring dot files
     config->max_file_size = DEFAULT_MAX_FILE_SIZE;
-    config->num_threads = DEFAULT_NUM_THREADS; // Always 1 now
     config->abort_on_error = 0;
     config->show_progress = 1;
     // thread_mode removed - always sequential now
@@ -436,7 +429,7 @@ void add_repo_path(ScrapeConfig *config, const char *path) {
 }
 
 // Add a file entry for processing
-void add_file_entry(ScrapeConfig *config, const char *path, size_t size) {
+void add_file_entry(ScrapeConfig *config, const char *path) {
     if (!config || !path) return;
 
     // Allocate or expand the file entries array
@@ -449,8 +442,6 @@ void add_file_entry(ScrapeConfig *config, const char *path, size_t size) {
 
     // Add the new file entry
     config->file_entries[config->file_entry_count].path = safe_strdup(path);
-    config->file_entries[config->file_entry_count].size = size;
-    config->file_entries[config->file_entry_count].processed = 0; // Not used in sequential version
     config->file_entry_count++;
 }
 
@@ -516,18 +507,6 @@ int is_allowed_file_type(ScrapeConfig *config, const char *file_path) {
     return 0;  // No matching extension found
 }
 
-// Check if a string ends with a specific suffix (case sensitive)
-int ends_with(const char *str, const char *suffix) {
-    if (!str || !suffix) return 0;
-
-    size_t str_len = strlen(str);
-    size_t suffix_len = strlen(suffix);
-
-    if (suffix_len > str_len) return 0;
-
-    return strncmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
-}
-
 // Check if a path is a directory
 int is_directory(const char *path) {
     if (!path) return 0;
@@ -563,29 +542,6 @@ size_t get_file_size(const char *path) {
     }
 
     return (size_t)st.st_size;
-}
-
-
-// Check if we have permission to access a file
-int secure_file_access(const char *path, int check_write) {
-    if (!path) return 0;
-
-    // Check if file exists
-    if (access(path, F_OK) != 0) {
-        return 0;
-    }
-
-    // Check read permission
-    if (access(path, R_OK) != 0) {
-        return 0;
-    }
-
-    // Check write permission if requested
-    if (check_write && access(path, W_OK) != 0) {
-        return 0;
-    }
-
-    return 1;
 }
 
 // Set secure permissions on a file
@@ -1104,7 +1060,7 @@ void process_directory(ScrapeConfig *config, const char *dir_path) {
             if (include_file) {
                 size_t size = get_file_size(full_path);
                 if (size <= config->max_file_size) {
-                    add_file_entry(config, full_path, size);
+                    add_file_entry(config, full_path);
                 } else {
                     log_message(LOG_WARN, "Skipping large file: %s (%zu bytes)",
                               full_path, size);
@@ -1312,11 +1268,7 @@ int main(int argc, char *argv[]) {
             config.name_pattern[MAX_PATH_LEN - 1] = '\0';
             i++; // Skip the value
         } else if (strcmp(argv[i], "-j") == 0 && i + 1 < argc) {
-            config.num_threads = atoi(argv[i+1]); // Still parse thread count, but will be 1 internally
-            if (config.num_threads > 1) {
-                log_message(LOG_WARN, "Multithreading is removed, using single thread mode.");
-                config.num_threads = 1; // Force to 1 thread
-            }
+            log_message(LOG_WARN, "The -j option is deprecated and has no effect");
             i++; // Skip the value
         } else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc) {
             // Size in MB
@@ -1330,7 +1282,6 @@ int main(int argc, char *argv[]) {
         } else if (strcmp(argv[i], "-p") == 0) {
             config.show_progress = 1;
         } else if (strcmp(argv[i], "-u") == 0) {
-            // Option removed, but kept for backward compatibility
             log_message(LOG_WARN, "The -u option is deprecated and has no effect");
         } else if (strcmp(argv[i], "-e") == 0) {
             config.abort_on_error = 1;
@@ -1418,12 +1369,16 @@ int main(int argc, char *argv[]) {
                 char *base_name = basename(path_copy);
                 if (fnmatch(config.name_pattern, base_name, 0) == 0) {
                     size_t size = get_file_size(argv[i]);
-                    add_file_entry(&config, argv[i], size);
+                    if (size <= config->max_file_size) {
+                        add_file_entry(&config, argv[i]);
+                    }
                 }
                 free(path_copy);
             } else {
                 size_t size = get_file_size(argv[i]);
-                add_file_entry(&config, argv[i], size);
+                if (size <= config.max_file_size) { 
+                    add_file_entry(&config, argv[i]);
+                }
             }
         }
     }
