@@ -1373,10 +1373,7 @@ int main(int argc, char *argv[]) {
                 }
                 free(path_copy);
             } else {
-                size_t size = get_file_size(argv[i]);
-                if (size <= config.max_file_size) { 
-                    add_file_entry(&config, argv[i]);
-                }
+                add_file_entry(&config, argv[i]);
             }
         }
     }
