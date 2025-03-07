@@ -1,6 +1,6 @@
 # LLM Globber
 
-LLM Globber is a command-line utility for collecting files from various locations, filtering them by type or name pattern, and outputting their contents to a single text file. This is particularly useful for preparing local files to be submitted to a Language Learning Model (LLM) for analysis.
+LLM Globber is a command-line utility written in Rust for collecting files from various locations, filtering them, and outputting their contents to a single text file. This tool is designed to prepare local files for analysis by Language Learning Models (LLMs).
 
 ## License
 
@@ -8,102 +8,133 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## Features
 
-- Collect files from multiple directories or specific file paths
-- Filter files by extension or name pattern
-- Recursively process directories
-- Automatically detect and properly handle binary files
-- Clean up output file by removing excessive newlines
-- Add file headers to the output for better organization
-- Generate timestamped output files to prevent overwriting
-- Robust error handling and reporting
+- **Collect Files:** Gathers files from specified directories and file paths.
+- **File Type Filtering:** Includes or excludes files based on comma-separated file type extensions (e.g., `.c,.h,.txt`).
+- **Name Pattern Filtering:** Filters files based on glob patterns in their names (e.g., `*.config*`).
+- **Recursive Directory Processing:** Traverses directories recursively to find files.
+- **Binary File Handling:** Detects binary files and omits their content from the output, noting them as binary.
+- **Dot File Handling:** Option to include or exclude dot files (hidden files).
+- **File Size Limit:** Skips files exceeding a specified maximum size.
+- **Progress Indication:** Shows progress during file processing.
+- **Verbose and Quiet Modes:** Controls the verbosity of output logging.
+- **Error Handling:** Robust error handling with options to abort on error or continue.
+- **Output Cleanup:** Reduces excessive newlines in the output file for cleaner text.
+- **Secure File Handling:** Uses secure file permissions for output files and sanitizes input paths.
+- **Efficient I/O:** Employs buffered I/O and memory mapping for performance.
 
 ## Installation
 
-```bash
-# Compile the source
-gcc -o llm_globber llm_globber.c -Wall -Wextra -O2
+Ensure you have Rust installed. If not, follow the instructions at [https://rust-lang.org/tools/install](https://rust-lang.org/tools/install).
 
-# Install to system (optional)
-sudo cp llm_globber /usr/local/bin/
+To build and install `llm_globber`, use Cargo, Rust's package manager:
+
+```bash
+cargo build --release
 ```
+
+This command builds an optimized executable in the target/release/ directory.
+
+For easier access, you can copy the executable to a directory in your system's PATH, such as /usr/local/bin/ or ~/.local/bin/:
+
+sudo cp target/release/llm_globber /usr/local/bin/
+# or
+mkdir -p ~/.local/bin
+cp target/release/llm_globber ~/.local/bin
+export PATH="$HOME/.local/bin:$PATH" # Add to your shell config file (e.g., .bashrc, .zshrc)```
+
+Alternatively, you can use cargo install to build and install the binary in ~/.cargo/bin (make sure ~/.cargo/bin is in your PATH):
+
+
+cargo install --path .
 
 ## Usage
 
-```
-Usage: llm_globber [options] [files/directories...]
-Options:
-  -o PATH        Output directory path
-  -n NAME        Output filename (without extension)
-  -t TYPES       File types to include (comma separated, e.g. '.c,.h,.txt')
-  -a             Include all files (no filtering by type)
-  -r             Recursively process directories
-  -name PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')
-  -v             Verbose output
-  -q             Quiet mode (suppress all output)
-  -h             Show this help message
-```
+llm_globber 0.1.0
+Ken Simpson
+Collects and formats files for LLMs
 
-## Examples
+USAGE:
+    llm_globber [OPTIONS] <FILES/DIRECTORIES>...
 
-### Process all C source files in the current directory
+ARGS:
+    <FILES/DIRECTORIES>...    Files or directories to process
 
-```bash
+OPTIONS:
+    -a, --all                  Include all files (no filtering by type)
+    -d, --dot                  Include dot files (hidden files)
+    -e, --abort-on-error       Abort on errors (default is to continue)
+    -h, --help                 Show this help message
+    -j, --threads <THREADS>    [Deprecated] Number of worker threads (always 1)
+    -n, --name <NAME>          Output filename (without extension)
+    -N, --pattern <PATTERN>    Filter files by name pattern (glob syntax, e.g., '*.c')
+    -o, --output <PATH>        Output directory path
+    -p, --progress             Show progress indicators
+    -q, --quiet                Quiet mode (suppress all output)
+    -r, --recursive            Recursively process directories
+    -s, --size <SIZE_MB>       Maximum file size in MB (default: 1024)
+    -t, --types <TYPES>        File types to include (comma separated, e.g., '.c,.h,.txt')
+    -v, --verbose              Verbose output
+    -V, --version              Print version information
+
+Examples
+Process all C source files in the current directory
 llm_globber -o output -n c_sources -t .c .
-```
-
-### Process all files in a project directory recursively
-
-```bash
+Use code with caution.
+Bash
+Process all files in a project directory recursively
 llm_globber -o output -n project_files -a -r /path/to/project
-```
-
-### Process only files that match a specific pattern
-
-```bash
-llm_globber -o output -n config_files -name "*config*" /path/to/project
-```
-
-### Process specific files
-
-```bash
+Use code with caution.
+Bash
+Process only files that match a specific pattern
+llm_globber -o output -n config_files -N "*config*" /path/to/project
+Use code with caution.
+Bash
+Process specific files
 llm_globber -o output -n important_files file1.c file2.h file3.txt
-```
-
-### Process files with verbose output
-
-```bash
+Use code with caution.
+Bash
+Process files with verbose output
 llm_globber -o output -n debug_files -v -r /path/to/project
-```
-
-### Process files silently (no output)
-
-```bash
+Use code with caution.
+Bash
+Process files silently (no output)
 llm_globber -o output -n silent_run -q -r /path/to/project
-```
+Use code with caution.
+Bash
+Abort on error
+llm_globber -o output -n strict_run -e -r /path/to/project
+Use code with caution.
+Bash
+Include dot files
+llm_globber -o output -n dotfile_run -d -r /path/to/config_dir
+Use code with caution.
+Bash
+Safety Features
+Memory Safety: Implemented in Rust, ensuring memory safety and preventing common vulnerabilities like buffer overflows.
 
-## Safety Features
+Path Sanitization: Sanitizes input paths to prevent directory traversal attacks.
 
-- Path sanitization to prevent directory traversal attacks
-- Binary file detection with automatic handling
-- Dot file warnings to prevent accidental inclusion of sensitive configuration files
-- Secure memory management with checks on all allocation paths
-- Proper error handling and reporting
-- Secure file permissions for output files
+Binary File Detection: Detects and handles binary files safely, preventing output corruption by omitting binary content.
 
-## Performance Optimizations
+Dot File Warnings: Provides warnings when including dot files to remind users about potentially sensitive hidden files.
 
-- Efficient file I/O with optimized buffer sizes
-- Streaming file processing to minimize memory usage
-- Dynamic memory allocation that scales with input size
-- Optimized string processing and file cleanup
-- Efficient directory traversal
+Secure File Permissions: Sets restrictive permissions (0600) on output files to protect sensitive data.
 
-## Output Format
+Error Handling: Comprehensive error handling to gracefully manage issues during file processing and provide informative error messages.
 
+Performance Optimizations
+Efficient File I/O: Utilizes BufReader and BufWriter for efficient buffered input and output operations.
+
+Memory Mapping (mmap): Employs memory mapping for processing large files, reducing memory overhead and improving speed.
+
+Streaming File Processing: Processes files in a streaming manner, minimizing memory usage, especially for large files.
+
+Optimized String Handling: Leverages Rust's efficient string processing capabilities.
+
+Parallel Processing (Future): Although the current version uses a single thread, the codebase is structured to be easily extensible for parallel processing in future versions, if needed.
+
+Output Format
 The output file will have the following format:
-
-```
-*Local Files*
 
 '''--- file1.c ---
 [Contents of file1.c]
@@ -114,16 +145,14 @@ The output file will have the following format:
 '''
 
 ...
-```
+Use code with caution.
+Each file's content is enclosed within '''--- <filepath> --- and ''' markers, making it easy to parse and identify individual file contents. An extra blank line is added after each file block for better readability.
 
-## Binary File Handling
+Binary File Handling
+When a binary file is detected, its contents are not included in the output file. Instead, the output file will contain:
 
-When a binary file is detected, its contents are not included in the output file, but instead it's marked as:
-
-```
 '''--- binary_file.bin ---
 [Binary file - contents omitted]
 '''
-```
-
-This prevents corruption of the output file and makes it more suitable for use with LLMs.
+Use code with caution.
+This ensures that the output file remains a clean text file, suitable for LLM ingestion, and avoids potential issues with binary data in text-based models.
