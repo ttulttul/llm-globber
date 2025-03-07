@@ -132,6 +132,8 @@ void print_progress(ScrapeConfig *config);
 void set_resource_limits();
 void init_locale();
 int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_size);
+int should_process_file(ScrapeConfig *config, const char *file_path, const char *base_name);
+int write_file_content(ScrapeConfig *config, const char *file_path, const unsigned char *data, size_t size, int is_binary);
 int set_secure_file_permissions(const char *path);
 int join_path(char *dest, size_t dest_size, const char *dir, const char *file);
 void strip_trailing_slash(char *path);
