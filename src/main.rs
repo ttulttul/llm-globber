@@ -620,6 +620,7 @@ fn main() -> Result<(), String> {
         .arg(
             Arg::with_name("name_pattern")
                 .long("name")
+                .short('N') // Add a short option that doesn't conflict with -n
                 .value_name("PATTERN")
                 .help("Filter files by name pattern (glob syntax, e.g., '*.c')")
                 .takes_value(true),
