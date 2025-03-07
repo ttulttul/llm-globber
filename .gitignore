@@ -51,6 +51,14 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+# Rust
+/target/
+**/*.rs.bk
+Cargo.lock
+.cargo/
+*.rlib
+*.rmeta
+
 # Aider etc
 .aider*
 .env
