@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use std::fs::{self, File};
-    use std::io::{self, Write};
+    use std::io::Write;
     use std::path::{Path, PathBuf};
     use std::process::Command;
     use tempfile::TempDir;
@@ -201,12 +201,13 @@ mod tests {
         // Get executable path
         let executable_path = get_executable_path();
         
-        // Run llm_globber with file type filter (.h files only)
+        // Run llm_globber with file type filter (.h files only) and recursive flag
         let output = Command::new(&executable_path)
             .args([
                 "-o", output_dir.to_str().unwrap(),
                 "-n", "file_types_test",
                 "-t", ".h",
+                "-r",
                 test_dir.to_str().unwrap(),
             ])
             .output()
@@ -325,6 +326,7 @@ mod tests {
                 "-o", output_dir.to_str().unwrap(),
                 "-n", "no_dotfiles_test",
                 "-a",
+                "-r",
                 test_dir.to_str().unwrap(),
             ])
             .output()
@@ -353,6 +355,7 @@ mod tests {
                 "-n", "with_dotfiles_test",
                 "-a",
                 "-d",
+                "-r",
                 test_dir.to_str().unwrap(),
             ])
             .output()
