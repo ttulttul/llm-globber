@@ -401,8 +401,25 @@ fn set_secure_file_permissions(path: &PathBuf) -> Result<(), String> {
 
 
 fn sanitize_path(path: &str) -> io::Result<String> {
+    // Check for empty paths
+    if path.trim().is_empty() {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Empty path provided"));
+    }
+    
+    // Check for null bytes which can be used in path traversal attacks
+    if path.contains('\0') {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Path contains null bytes"));
+    }
+    
+    // Convert to absolute path and normalize
     let path_buf = PathBuf::from(path);
     let canonical_path = path_buf.canonicalize()?;
+    
+    // Verify the path exists after canonicalization
+    if !canonical_path.exists() {
+        return Err(io::Error::new(io::ErrorKind::NotFound, "Path does not exist after canonicalization"));
+    }
+    
     Ok(canonical_path.to_string_lossy().to_string())
 }
 

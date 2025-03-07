@@ -111,7 +111,7 @@ llm_globber -o output -n dotfile_run -d -r /path/to/config_dir
 ## Safety Features
 
 - **Memory Safety:** Implemented in Rust, ensuring memory safety and preventing common vulnerabilities like buffer overflows.
-- **Path Sanitization:** Sanitizes input paths to prevent directory traversal attacks.
+- **Path Sanitization:** Sanitizes input paths to prevent directory traversal attacks, including checks for null bytes and empty paths.
 - **Binary File Detection:** Detects and handles binary files safely, preventing output corruption by omitting binary content.
 - **Dot File Warnings:** Provides warnings when including dot files to remind users about potentially sensitive hidden files.
 - **Secure File Permissions:** Sets restrictive permissions (0600) on output files to protect sensitive data.
