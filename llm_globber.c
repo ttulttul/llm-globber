@@ -62,8 +62,6 @@ typedef struct ExtHashEntry {
     struct ExtHashEntry* next;
 } ExtHashEntry;
 
-// Forward declaration of ScrapeConfig for ThreadContext - Not needed anymore
-
 typedef struct ScrapeConfig {
     char** repo_paths;         // Dynamically allocated array of paths
     size_t repo_path_count;    // Current number of paths
@@ -82,8 +80,7 @@ typedef struct ScrapeConfig {
     int no_dot_files;          // 1 if dot files should be ignored
     size_t max_file_size;      // Maximum file size to process
     FILE* output_file;         // Output file handle
-    pthread_mutex_t output_mutex; // Mutex for synchronizing output file access (still used for sequential output)
-    // ThreadPool* thread_pool;   // Thread pool for parallel processing - REMOVED
+    pthread_mutex_t output_mutex; // Mutex for synchronizing output file access
     int abort_on_error;        // 1 if we should abort on errors
     int show_progress;         // 1 if we should show progress indicators
     int processed_files;       // Counter for processed files
@@ -120,7 +117,7 @@ size_t get_file_size(const char *path);
 int is_binary_file(const char *path);
 int is_binary_data(const unsigned char *data, size_t size);
 int is_dot_file(const char *file_path);
-int process_file(ScrapeConfig *config, const char *file_path); // Now only one process_file
+int process_file(ScrapeConfig *config, const char *file_path);
 unsigned int hash_string(const char *str);
 void add_file_type(ScrapeConfig *config, const char *extension);
 int is_allowed_file_type(ScrapeConfig *config, const char *file_path);
@@ -129,7 +126,7 @@ void setup_signal_handlers();
 void print_progress(ScrapeConfig *config);
 void set_resource_limits();
 void init_locale();
-int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_size); // Now only one process_file_mmap
+int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_size);
 int set_secure_file_permissions(const char *path);
 int join_path(char *dest, size_t dest_size, const char *dir, const char *file);
 void strip_trailing_slash(char *path);
@@ -813,7 +810,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
         }
     }
 
-    // Lock the output file mutex for thread safety (even in sequential mode for consistency and safety)
+    // Lock the output file mutex for thread safety
     pthread_mutex_lock(&config->output_mutex);
 
     // Write file header - use the full path
@@ -1140,7 +1137,6 @@ char* run_scraper(ScrapeConfig *config) {
     // Process each file
     int files_processed = 0;
 
-    // Sequential processing only now
     for (size_t i = 0; i < config->file_entry_count && !g_interrupted; i++) {
         if (process_file(config, config->file_entries[i].path)) {
             files_processed++;
@@ -1223,7 +1219,7 @@ void print_usage(const char *program_name) {
     printf("  -a             Include all files (no filtering by type)\n");
     printf("  -r             Recursively process directories\n");
     printf("  -name PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')\n");
-    printf("  -j THREADS     [Deprecated] Number of worker threads (always 1)\n"); // Updated help message
+    printf("  -j THREADS     [Deprecated] Number of worker threads (always 1)\n");
     printf("  -s SIZE        Maximum file size in MB (default: %d)\n",
            (int)(DEFAULT_MAX_FILE_SIZE / (1024 * 1024)));
     printf("  -d             Include dot files (hidden files)\n");
@@ -1391,8 +1387,6 @@ int main(int argc, char *argv[]) {
         return EXIT_ARGS_ERROR;
     }
 
-    // Don't sort files by size to preserve command line order
-    // This ensures files are processed in the exact order specified by the user
 
     // Run the scraper
     char *output_file = run_scraper(&config);
