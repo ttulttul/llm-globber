@@ -1,10 +1,8 @@
 [package]
-name = "llm_globber" # Replace with your desired package name, should match PROJECT_NAME in Makefile
-version = "0.1.0" # Or your desired version
-authors = ["Ken Simpson <ksimpson@mailchannels.com>"] # Replace with your name and email
-edition = "2021" # Or "2018" if you prefer
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+name = "llm_globber" 
+version = "0.1.0" 
+authors = ["Ken Simpson <ksimpson@mailchannels.com>"]
+edition = "2021"
 
 [dependencies]
 clap = { version = "3.1", features = ["derive"] } # Or a more recent version

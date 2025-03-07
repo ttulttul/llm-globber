@@ -1,19 +1,27 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -O2
-TARGET = llm_globber
-SRCS = llm_globber.c
-OBJS = $(SRCS:.c=.o)
+# Makefile for Rust project
+
+# Project name (should match your Cargo.toml package name)
+PROJECT_NAME = llm_globber
+
+# Executable name (will be placed in ./target/release or ./target/debug)
+TARGET = ./target/release/$(PROJECT_NAME)
+
+# Source files (Cargo.toml manages this, but we can list src/main.rs for clarity)
+SRCS = src/main.rs
+
+# Rust compiler (using cargo)
+CARGO = cargo
+
+# Build profile (release for optimized build, debug for development)
+BUILD_PROFILE = release
 
 all: $(TARGET)
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^
-
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+$(TARGET): src/main.rs
+	$(CARGO) build --$(BUILD_PROFILE)
 
 clean:
-	rm -f $(OBJS) $(TARGET)
+	$(CARGO) clean
 
 test: $(TARGET)
 	chmod +x tests/test_llm_globber.sh tests/test_basic.sh tests/test_recursive.sh tests/test_file_types.sh tests/test_name_pattern.sh tests/test_dotfiles.sh tests/test_verbose_quiet.sh tests/test_common.sh
