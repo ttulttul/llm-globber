@@ -280,7 +280,7 @@ fn print_usage(program_name: &str) {
     println!("  -t TYPES       File types to include (comma separated, e.g. '.c,.h,.txt')");
     println!("  -a             Include all files (no filtering by type)");
     println!("  -r             Recursively process directories");
-    println!("  -name PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')");
+    println!("  -N, --pattern PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')");
     println!("  -j THREADS     [Deprecated] Number of worker threads (always 1)");
     println!("  -s SIZE        Maximum file size in MB (default: {})", DEFAULT_MAX_FILE_SIZE / (1024 * 1024));
     println!("  -d             Include dot files (hidden files)");
@@ -619,8 +619,8 @@ fn main() -> Result<(), String> {
         )
         .arg(
             Arg::with_name("name_pattern")
-                .long("name")
-                .short('N') // Add a short option that doesn't conflict with -n
+                .long("pattern")  // Changed from "name" to "pattern" to avoid conflict
+                .short('N')
                 .value_name("PATTERN")
                 .help("Filter files by name pattern (glob syntax, e.g., '*.c')")
                 .takes_value(true),
