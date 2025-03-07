@@ -12,6 +12,9 @@ use glob::{glob, Pattern};
 use log::{debug, error, info, warn, LevelFilter, Log, Metadata, Record, SetLoggerError};
 use memmap2::MmapOptions;
 
+#[cfg(test)]
+mod tests;
+
 const MAX_FILES: usize = 100000;
 const IO_BUFFER_SIZE: usize = 1 << 18; // 256KB
 const DEFAULT_MAX_FILE_SIZE: u64 = 1 << 30; // 1GB

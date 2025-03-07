@@ -23,8 +23,16 @@ $(TARGET): src/main.rs
 clean:
 	$(CARGO) clean
 
-test: $(TARGET)
+# Run Rust's built-in tests
+rust-test:
+	$(CARGO) test
+
+# Run the legacy bash tests
+bash-test: $(TARGET)
 	chmod +x tests/test_llm_globber.sh tests/test_basic.sh tests/test_recursive.sh tests/test_file_types.sh tests/test_name_pattern.sh tests/test_dotfiles.sh tests/test_verbose_quiet.sh tests/test_common.sh
 	cd tests && ./test_llm_globber.sh
 
-.PHONY: all clean test
+# Run both test suites
+test: rust-test bash-test
+
+.PHONY: all clean test rust-test bash-test

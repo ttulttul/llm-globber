@@ -11,3 +11,6 @@ log = "0.4" # Or a more recent version
 memmap2 = "0.5" # Or a more recent version
 simplelog = "0.12" # Using a more recent version that's available
 chrono = "0.4" # Or a more recent version
+
+[dev-dependencies]
+tempfile = "3.3"
