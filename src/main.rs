@@ -443,8 +443,6 @@ fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) 
             },
             _ => {}
         }
-            return false;
-        }
     }
 
     if config.filter_files && !config.file_type_hash.is_empty() && !is_allowed_file_type(config, file_path) {
