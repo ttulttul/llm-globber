@@ -34,6 +34,11 @@
 #define DEFAULT_MAX_FILE_SIZE (1ULL << 30) // 1GB default file size limit
 #define HASH_TABLE_SIZE 128            // Size of file type hash table
 
+// Utility macros
+#define SAFE_FREE(ptr) do { if (ptr) { free(ptr); (ptr) = NULL; } } while(0)
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 // Exit codes
 #define EXIT_OK 0
 #define EXIT_ARGS_ERROR 1
@@ -260,14 +265,14 @@ void* safe_calloc(size_t nmemb, size_t size) {
 // Safe realloc with error checking
 void* safe_realloc(void *ptr, size_t size) {
     if (size == 0) {
-        free(ptr);
+        SAFE_FREE(ptr);
         return NULL;
     }
 
     void *new_ptr = realloc(ptr, size);
     if (!new_ptr) {
         log_message(LOG_ERROR, "Memory reallocation failed (requested %zu bytes)", size);
-        free(ptr); // Free the original pointer
+        SAFE_FREE(ptr); // Free the original pointer
         exit(EXIT_MEMORY_ERROR);
     }
     return new_ptr;
@@ -375,22 +380,98 @@ int init_config(ScrapeConfig *config) {
     return 1;
 }
 
+// Helper function to determine if a file should be processed
+int should_process_file(ScrapeConfig *config, const char *file_path, const char *base_name) {
+    if (!config || !file_path || !base_name) return 0;
+    
+    // Check if this is a dot file
+    if (base_name[0] == '.') {
+        if (config->no_dot_files) {
+            log_message(LOG_DEBUG, "Skipping dot file: %s", file_path);
+            return 0;
+        } else {
+            log_message(LOG_WARN, "Including dot file: %s", file_path);
+        }
+    }
+    
+    // Check file size
+    size_t file_size = get_file_size(file_path);
+    if (file_size > config->max_file_size) {
+        log_message(LOG_WARN, "Skipping file %s: size exceeds limit (%zu > %zu)",
+                   file_path, file_size, config->max_file_size);
+        return 0;
+    }
+    
+    // Check name pattern if specified
+    if (strlen(config->name_pattern) > 0) {
+        if (fnmatch(config->name_pattern, base_name, 0) != 0) {
+            return 0;
+        }
+    }
+    
+    // Check file type filter if enabled
+    if (config->filter_files && config->file_type_count > 0) {
+        if (!is_allowed_file_type(config, file_path)) {
+            return 0;
+        }
+    }
+    
+    return 1;
+}
+
+// Helper function to write file content to output
+int write_file_content(ScrapeConfig *config, const char *file_path, const unsigned char *data, size_t size, int is_binary) {
+    if (!config || !file_path) return 0;
+    
+    // Lock the output file mutex for thread safety
+    pthread_mutex_lock(&config->output_mutex);
+    
+    // Write file header - use the full path
+    fprintf(config->output_file, "'''--- %s ---\n", file_path);
+    
+    // Handle binary files
+    if (is_binary) {
+        fprintf(config->output_file, "[Binary file - contents omitted]\n'''\n");
+    } else {
+        // Process and write file content
+        if (size > 0 && data != NULL) {
+            for (size_t i = 0; i < size; i++) {
+                if (data[i] >= 32 && data[i] <= 126) { // ASCII printable
+                    fputc(data[i], config->output_file);
+                } else if (data[i] == '\n' || data[i] == '\r' || data[i] == '\t') {
+                    fputc(data[i], config->output_file); // Control characters
+                } else {
+                    fputs("?", config->output_file); // Simple replacement character
+                }
+            }
+        }
+        fprintf(config->output_file, "\n'''\n\n"); // Add closing marker with newline and an extra blank line
+    }
+    
+    fflush(config->output_file); // Ensure content is written
+    
+    // Unlock the mutex
+    pthread_mutex_unlock(&config->output_mutex);
+    
+    return 1;
+}
+
 // Free all allocated memory in the config
 void free_config(ScrapeConfig *config) {
     if (!config) return;
 
     // Free repository paths
     for (size_t i = 0; i < config->repo_path_count; i++) {
-        free(config->repo_paths[i]);
+        SAFE_FREE(config->repo_paths[i]);
     }
-    free(config->repo_paths);
+    SAFE_FREE(config->repo_paths);
 
     // Free file entries
     if (config->file_entries) {
         for (size_t i = 0; i < config->file_entry_count; i++) {
-            free(config->file_entries[i].path);
+            SAFE_FREE(config->file_entries[i].path);
         }
-        free(config->file_entries);
+        SAFE_FREE(config->file_entries);
     }
 
     // Free file type hash table
@@ -398,13 +479,11 @@ void free_config(ScrapeConfig *config) {
         ExtHashEntry *entry = config->file_type_hash[i];
         while (entry) {
             ExtHashEntry *next = entry->next;
-            free(entry->extension);
-            free(entry);
+            SAFE_FREE(entry->extension);
+            SAFE_FREE(entry);
             entry = next;
         }
     }
-
-
 
     // Destroy mutex
     pthread_mutex_destroy(&config->output_mutex);
@@ -428,13 +507,6 @@ void add_repo_path(ScrapeConfig *config, const char *path) {
 // Add a file entry for processing
 void add_file_entry(ScrapeConfig *config, const char *path) {
     if (!config || !path) return;
-
-    // Check file size limit
-    size_t size = get_file_size(path);
-    if (size > config->max_file_size) {
-        log_message(LOG_WARN, "Skipping large file: %s (%zu bytes)", path, size);
-        return;
-    }
 
     // Allocate or expand the file entries array
     if (config->file_entries == NULL) {
@@ -766,35 +838,21 @@ int clean_up_text(const char *filename, int max_consecutive_newlines) {
 int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_size) {
     if (!config || !file_path) return 0;
 
-    // Skip if file is too large
-    if (file_size > config->max_file_size) {
-        log_message(LOG_WARN, "Skipping file %s: size exceeds limit (%zu > %zu)",
-                   file_path, file_size, config->max_file_size);
-        return 0;
-    }
-
     // Get file basename for checking dot files
     char *path_copy = safe_strdup(file_path);
     char *base_name = basename(path_copy);
-
-    // Check if this is a dot file
-    if (base_name[0] == '.') {
-        if (config->no_dot_files) {
-            log_message(LOG_DEBUG, "Skipping dot file: %s", file_path);
-            free(path_copy);
-            return 0;
-        } else {
-            log_message(LOG_WARN, "Including dot file: %s", file_path);
-            // Make sure we're actually including the file
-            // No early return here
-        }
+    
+    // Check if file should be processed
+    if (!should_process_file(config, file_path, base_name)) {
+        SAFE_FREE(path_copy);
+        return 0;
     }
 
     // Open the file
     int fd = open(file_path, O_RDONLY);
     if (fd == -1) {
         log_message(LOG_ERROR, "Error opening file %s: %s", file_path, strerror(errno));
-        free(path_copy);
+        SAFE_FREE(path_copy);
         return 0;
     }
 
@@ -805,49 +863,23 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
         if (file_data == MAP_FAILED) {
             log_message(LOG_ERROR, "Memory mapping failed for %s: %s", file_path, strerror(errno));
             close(fd);
-            free(path_copy);
+            SAFE_FREE(path_copy);
             return 0;
         }
     }
 
-    // Lock the output file mutex for thread safety
-    pthread_mutex_lock(&config->output_mutex);
-
-    // Write file header - use the full path
-    fprintf(config->output_file, "'''--- %s ---\n", file_path);
-
     // Check for binary content
-    if (file_size > 0 && is_binary_data(file_data, file_size)) {
-        fprintf(config->output_file, "[Binary file - contents omitted]\n'''\n");
-        fflush(config->output_file); // Ensure content is written
-    } else {
-        // Process and write file content
-        if (file_size > 0) {
-            const unsigned char *data = (const unsigned char *)file_data;
-            for (size_t i = 0; i < file_size; i++) {
-                if (data[i] >= 32 && data[i] <= 126) { // ASCII printable
-                    fputc(data[i], config->output_file);
-                } else if (data[i] == '\n' || data[i] == '\r' || data[i] == '\t') {
-                    fputc(data[i], config->output_file); // Control characters
-                } else {
-                    fputs("?", config->output_file); // Simple replacement character
-                }
-            }
-        }
-        fprintf(config->output_file, "\n'''\n\n"); // Add closing marker with newline and an extra blank line
-        fflush(config->output_file); // Ensure content is written
-    }
-
-    // Unlock the mutex
-    pthread_mutex_unlock(&config->output_mutex);
-
+    int is_binary = (file_size > 0) ? is_binary_data(file_data, file_size) : 0;
+    
+    // Write file content
+    write_file_content(config, file_path, file_data, file_size, is_binary);
 
     // Clean up
     if (file_data != MAP_FAILED) {
         munmap(file_data, file_size);
     }
     close(fd);
-    free(path_copy);
+    SAFE_FREE(path_copy);
 
     return 1;
 }
@@ -855,12 +887,6 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
 // Process a file and write its contents to the output file
 int process_file(ScrapeConfig *config, const char *file_path) {
     if (!config || !file_path) return 0;
-
-    // Check if file exists and is readable
-    if (!is_regular_file(file_path)) {
-        log_message(LOG_WARN, "Skipping invalid file path: %s", file_path);
-        return 0;
-    }
 
     // Check if file exists and is readable
     if (!is_regular_file(file_path)) {
@@ -880,25 +906,18 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     // Get file basename for checking dot files
     char *path_copy = safe_strdup(file_path);
     char *base_name = basename(path_copy);
-
-    // Check if this is a dot file
-    if (base_name[0] == '.') {
-        if (config->no_dot_files) {
-            log_message(LOG_DEBUG, "Skipping dot file: %s", file_path);
-            free(path_copy);
-            return 0;
-        } else {
-            log_message(LOG_WARN, "Including dot file: %s", file_path);
-            // Make sure we're actually including the file
-            // No early return here
-        }
+    
+    // Check if file should be processed
+    if (!should_process_file(config, file_path, base_name)) {
+        SAFE_FREE(path_copy);
+        return 0;
     }
 
     // Open file
     FILE *input = fopen(file_path, "rb");
     if (!input) {
         log_message(LOG_ERROR, "Error reading file %s: %s", file_path, strerror(errno));
-        free(path_copy);
+        SAFE_FREE(path_copy);
         return 0;
     }
 
@@ -907,51 +926,40 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     size_t check_bytes = fread(check_buffer, 1, sizeof(check_buffer), input);
     int is_binary = is_binary_data(check_buffer, check_bytes);
 
-    // Rewind to beginning of file
-    rewind(input);
-
-    // Lock the output file mutex for thread safety
-    pthread_mutex_lock(&config->output_mutex);
-
-    // Write file header - use the full path
-    fprintf(config->output_file, "'''--- %s ---\n", file_path);
-
-    // Handle binary files
+    // If binary, we don't need to read the whole file
     if (is_binary) {
-        fprintf(config->output_file, "[Binary file - contents omitted]\n'''\n");
-        pthread_mutex_unlock(&config->output_mutex);
+        write_file_content(config, file_path, NULL, 0, is_binary);
         fclose(input);
-        free(path_copy);
+        SAFE_FREE(path_copy);
         return 1;
     }
 
+    // Rewind to beginning of file
+    rewind(input);
+
     // Use a larger buffer for better performance
-    char *buffer = safe_malloc(IO_BUFFER_SIZE);
+    unsigned char *buffer = safe_malloc(IO_BUFFER_SIZE);
+    size_t total_bytes = 0;
     size_t bytes_read;
 
-    // Process and write file content
-    while ((bytes_read = fread(buffer, 1, IO_BUFFER_SIZE, input)) > 0) {
-        for (size_t j = 0; j < bytes_read; j++) {
-            if (buffer[j] >= 32 && buffer[j] <= 126) { // ASCII printable
-                fputc(buffer[j], config->output_file);
-            } else if (buffer[j] == '\n' || buffer[j] == '\r' || buffer[j] == '\t') {
-                fputc(buffer[j], config->output_file); // Control characters
-            } else {
-                fputs("?", config->output_file); // Simple replacement character
-            }
+    // Read the entire file into memory
+    while ((bytes_read = fread(buffer + total_bytes, 1, 
+                              MIN(IO_BUFFER_SIZE - total_bytes, IO_BUFFER_SIZE), input)) > 0) {
+        total_bytes += bytes_read;
+        
+        // If buffer is full, expand it
+        if (total_bytes == IO_BUFFER_SIZE) {
+            buffer = safe_realloc(buffer, IO_BUFFER_SIZE * 2);
         }
     }
 
-    fprintf(config->output_file, "\n'''\n\n");
-    fflush(config->output_file); // Ensure content is written
-
-    // Unlock the mutex
-    pthread_mutex_unlock(&config->output_mutex);
+    // Write file content
+    write_file_content(config, file_path, buffer, total_bytes, 0);
 
     // Clean up
-    free(buffer);
+    SAFE_FREE(buffer);
     fclose(input);
-    free(path_copy);
+    SAFE_FREE(path_copy);
 
     return 1;
 }
@@ -1060,10 +1068,15 @@ void process_directory(ScrapeConfig *config, const char *dir_path) {
                 include_file = is_allowed_file_type(config, full_path);
             }
 
-            // Add the file if it passed all filters
-            if (include_file) {
+            // Check if file should be processed
+            char *path_copy = safe_strdup(full_path);
+            char *base_name = basename(path_copy);
+            
+            if (should_process_file(config, full_path, base_name)) {
                 add_file_entry(config, full_path);
             }
+            
+            SAFE_FREE(path_copy);
         }
     }
 
@@ -1360,17 +1373,15 @@ int main(int argc, char *argv[]) {
                 log_message(LOG_WARN, "%s is a directory. Use -r to process recursively.", argv[i]);
             }
         } else if (S_ISREG(path_stat.st_mode)) {
-            // It's a file - add directly but check name pattern if specified
-            if (strlen(config.name_pattern) > 0) {
-                char *path_copy = safe_strdup(argv[i]);
-                char *base_name = basename(path_copy);
-                if (fnmatch(config.name_pattern, base_name, 0) == 0) {
-                    add_file_entry(&config, argv[i]);
-                }
-                free(path_copy);
-            } else {
+            // It's a file - check if it should be processed
+            char *path_copy = safe_strdup(argv[i]);
+            char *base_name = basename(path_copy);
+            
+            if (should_process_file(&config, argv[i], base_name)) {
                 add_file_entry(&config, argv[i]);
             }
+            
+            SAFE_FREE(path_copy);
         }
     }
 
