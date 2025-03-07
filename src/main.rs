@@ -12,22 +12,17 @@ use glob::{glob, Pattern};
 use log::{debug, error, info, warn, LevelFilter, Log, Metadata, Record, SetLoggerError};
 use memmap2::MmapOptions;
 
-const MAX_PATH_LEN: usize = 4096; // PATH_MAX in C
 const MAX_FILES: usize = 100000;
-const MAX_FILE_TYPES: usize = 100;
-const MAX_FILE_TYPE_LEN: usize = 30;
-const INITIAL_BUFFER_SIZE: usize = 1 << 20; // 1MB
 const IO_BUFFER_SIZE: usize = 1 << 18; // 256KB
 const DEFAULT_MAX_FILE_SIZE: u64 = 1 << 30; // 1GB
-const HASH_TABLE_SIZE: usize = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 enum LogLevel {
-    Error,
-    Warn,
-    Info,
-    Debug,
-    Trace,
+    Error = 0,
+    Warn = 1,
+    Info = 2,
+    Debug = 3,
+    Trace = 4,
 }
 
 impl From<LogLevel> for LevelFilter {
@@ -100,6 +95,8 @@ type ExtHashEntry = String; // In Rust, String directly is used, HashMap manages
 
 #[derive(Debug)]
 struct ScrapeConfig {
+    // Keeping repo_paths for API compatibility but marking with #[allow(dead_code)]
+    #[allow(dead_code)]
     repo_paths: Vec<String>,
     file_entries: Vec<FileEntry>,
     output_path: String,
@@ -147,7 +144,7 @@ impl Default for ScrapeConfig {
     }
 }
 
-fn run_scraper(mut config: &mut ScrapeConfig) -> Result<String, String> {
+fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
     print_header("Starting LLM Globber File Processing");
     info!("Starting file processing...");
 
@@ -334,6 +331,7 @@ fn add_file_entry(config: &mut ScrapeConfig, path: &str) {
 }
 
 
+#[allow(dead_code)]
 fn is_directory(path: &str) -> bool {
     fs::metadata(path).map(|m| m.is_dir()).unwrap_or(false)
 }
@@ -346,6 +344,7 @@ fn get_file_size(path: &str) -> io::Result<u64> {
     fs::metadata(path).map(|m| m.len())
 }
 
+#[allow(dead_code)]
 fn is_binary_file(path: &str) -> io::Result<bool> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
@@ -371,6 +370,7 @@ fn is_binary_data(data: &[u8]) -> bool {
 }
 
 
+#[allow(dead_code)]
 fn is_dot_file(file_path: &str) -> bool {
     Path::new(file_path)
         .file_name()
