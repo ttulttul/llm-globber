@@ -359,9 +359,12 @@ fn is_binary_file(path: &str) -> io::Result<bool> {
 }
 
 fn is_binary_data(data: &[u8]) -> bool {
-    let mut non_printable = 0;
     let check_limit = std::cmp::min(data.len(), 4096);
+    if check_limit == 0 {
+        return false;
+    }
 
+    let mut non_printable = 0;
     for &byte in &data[..check_limit] {
         if byte == 0 || (byte < 32 && byte != b'\n' && byte != b'\r' && byte != b'\t') {
             non_printable += 1;
@@ -372,7 +375,6 @@ fn is_binary_data(data: &[u8]) -> bool {
     }
     (non_printable * 100 / check_limit) > 10
 }
-
 
 #[allow(dead_code)]
 fn is_dot_file(file_path: &str) -> bool {
