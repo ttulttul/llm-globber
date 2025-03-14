@@ -55,8 +55,8 @@ rm -rf test_files/subdir
 
 # Step 4: Run unglob to extract files
 echo "Running unglob to extract files..."
-echo "Command: ../target/release/llm_globber -u $GLOBBED_FILE -v"
-../target/release/llm_globber -u "$GLOBBED_FILE" -v
+echo "Command: ../target/release/llm_globber -u $GLOBBED_FILE -o test_files -v"
+../target/release/llm_globber -u "$GLOBBED_FILE" -o test_files -v
 
 # Step 5: Verify extracted files
 echo "Verifying extracted files..."
