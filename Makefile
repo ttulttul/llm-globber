@@ -49,8 +49,8 @@ c-test: $(C_TARGET)
 	chmod +x tests/test_c_version.sh tests/test_common.sh
 	cd tests && ./test_c_version.sh
 
-# Profile target using cargo-flamegraph with Instruments support for macOS
+# Profile target using cargo-flamegraph
 profile:
-	cargo flamegraph --instruments --release --bin $(PROJECT_NAME) -- --recursive .
+	cargo flamegraph --release --bin $(PROJECT_NAME) -- --recursive .
 
 .PHONY: all clean test rust-test bash-test c-test profile
