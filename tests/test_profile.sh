@@ -10,7 +10,7 @@ mkdir -p test_files
 # Generate large test files for better profiling
 echo "Generating large test files for profiling..."
 
-# Function to generate a large file with repeated content
+# Function to generate a large file with repeated content - much faster version
 generate_large_file() {
     local filename=$1
     local size_mb=$2
@@ -18,30 +18,32 @@ generate_large_file() {
     
     echo "Generating $filename ($size_mb MB)..."
     
-    # Create the file with initial content
-    echo "$template" > "$filename"
+    # Create a small header with the template and some code-like content
+    {
+        echo "$template"
+        echo "/* File: $filename */"
+        echo "/* Generated for profiling tests */"
+        echo ""
+        echo "#include <stdio.h>"
+        echo "#include <stdlib.h>"
+        echo ""
+        echo "void function_example() {"
+        echo "    int x = 42;"
+        echo "    for (int i = 0; i < 1000; i++) {"
+        echo "        x += i * 42;"
+        echo "    }"
+        echo "    return x;"
+        echo "}"
+        echo ""
+        # Add some unique content to prevent compression
+        date +"%Y-%m-%d %H:%M:%S.%N"
+        echo ""
+    } > "$filename"
     
-    # Calculate how many iterations needed to reach approximate size
-    # Average line is ~50 bytes, 20 lines is ~1KB
-    local kb_needed=$((size_mb * 1024))
-    local iterations=$((kb_needed * 1))
-    
-    # Generate the file by appending content in chunks
-    for i in $(seq 1 $iterations); do
-        # Add line number to make content unique (prevents compression)
-        echo "// Line $i: $template $(date +%N)" >> "$filename"
-        
-        # Add some code-like content every 100 lines
-        if [ $((i % 100)) -eq 0 ]; then
-            echo "void function_$i() {" >> "$filename"
-            echo "    int x = $i;" >> "$filename"
-            echo "    for (int i = 0; i < $i; i++) {" >> "$filename"
-            echo "        x += i * $i;" >> "$filename"
-            echo "    }" >> "$filename"
-            echo "    return x;" >> "$filename"
-            echo "}" >> "$filename"
-        fi
-    done
+    # Use dd to quickly generate a large file by creating a block of zeros
+    # bs=1M means 1 megabyte blocks, count is the number of blocks
+    # We subtract 1 from size_mb because we already wrote a small header
+    dd if=/dev/zero bs=1M count=$((size_mb - 1)) >> "$filename" 2>/dev/null
     
     # Get actual file size
     local actual_size=$(du -m "$filename" | cut -f1)
