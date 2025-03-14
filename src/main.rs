@@ -151,7 +151,9 @@ impl Default for ScrapeConfig {
 }
 
 fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
-    print_header("Starting LLM Globber File Processing");
+    if !config.quiet {
+        print_header("Starting LLM Globber File Processing");
+    }
     info!("Starting file processing...");
 
     config.start_time = Instant::now();
@@ -215,7 +217,9 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
     }
 
 
-    print_header("Processing Complete");
+    if !config.quiet {
+        print_header("Processing Complete");
+    }
     info!(
         "Done. Processed {} files in {:.2} seconds ({:.1} files/sec). Output: {}",
         files_processed,
@@ -575,7 +579,8 @@ fn print_progress(config: &ScrapeConfig) {
 }
 
 fn print_header(msg: &str) {
-    if *GLOBAL_LOGGER.level.lock().unwrap() < LogLevel::Debug {
+    // Only print headers if we're in debug mode and not in quiet mode
+    if *GLOBAL_LOGGER.level.lock().unwrap() < LogLevel::Debug || *GLOBAL_LOGGER.quiet_mode.lock().unwrap() {
         return;
     }
     println!();
