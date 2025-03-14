@@ -35,4 +35,9 @@ bash-test: $(TARGET)
 # Run both test suites
 test: rust-test bash-test
 
-.PHONY: all clean test rust-test bash-test
+# Run just the C version tests
+c-test: $(C_TARGET)
+	chmod +x tests/test_c_version.sh tests/test_common.sh
+	cd tests && ./test_c_version.sh
+
+.PHONY: all clean test rust-test bash-test c-version c-test
