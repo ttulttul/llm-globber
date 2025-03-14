@@ -72,7 +72,7 @@ OPTIONS:
     -n, --name <NAME>          Output filename (without extension)
     -N, --pattern <PATTERN>    Filter files by name pattern (glob syntax, e.g., '*.c')
     -o, --output <PATH>        Output directory path
-    -p, --progress             Show progress indicators
+    -p, --progress             Show progress indicators (disabled by default)
     -q, --quiet                Quiet mode (suppress all output)
     -r, --recursive            Recursively process directories
     -s, --size <SIZE_MB>       Maximum file size in MB (default: 1024)
@@ -107,6 +107,9 @@ llm_globber -o output -n strict_run -e -r /path/to/project
 
 # Include dot files
 llm_globber -o output -n dotfile_run -d -r /path/to/config_dir
+
+# Process a git repository (automatically uses tracked files)
+llm_globber --git /path/to/repo -o output
 ```
 ## Safety Features
 
