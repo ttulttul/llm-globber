@@ -37,6 +37,11 @@ command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
+
 # Function to get number of CPU cores
 get_cpu_cores() {
     if command_exists nproc; then

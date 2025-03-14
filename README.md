@@ -112,6 +112,28 @@ llm_globber -o output -n dotfile_run -d -r /path/to/config_dir
 # Process a git repository (automatically uses tracked files)
 llm_globber --git /path/to/repo -o output
 ```
+
+### Git Integration
+
+When using the `--git` option, LLM Globber automatically:
+
+1. Verifies the path is a valid git repository
+2. Uses the repository name and branch for the output filename
+3. Processes only tracked files in the repository
+4. Maintains the repository's directory structure in the output
+
+This is especially useful for preparing codebases for LLM analysis:
+
+```bash
+# Process a git repository with default settings
+llm_globber --git /path/to/repo -o output
+
+# Process a git repository with specific file types
+llm_globber --git /path/to/repo -o output -t .py,.js,.html
+
+# Process a git repository with verbose output
+llm_globber --git /path/to/repo -o output -v
+```
 ## Safety Features
 
 - **Memory Safety:** Implemented in Rust, ensuring memory safety and preventing common vulnerabilities like buffer overflows.
