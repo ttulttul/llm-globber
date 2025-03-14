@@ -49,4 +49,8 @@ c-test: $(C_TARGET)
 	chmod +x tests/test_c_version.sh tests/test_common.sh
 	cd tests && ./test_c_version.sh
 
-.PHONY: all clean test rust-test bash-test c-test
+# Profile target for macOS using Instruments
+profile: $(TARGET)
+	instruments -t Time\ Profiler $(TARGET) -- --recursive .
+
+.PHONY: all clean test rust-test bash-test c-test profile
