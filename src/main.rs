@@ -121,6 +121,8 @@ struct ScrapeConfig {
     failed_files: usize,
     start_time: Instant,
     git_repo_path: Option<String>,
+    unglob_mode: bool,
+    unglob_input_file: String,
 }
 
 impl Default for ScrapeConfig {
@@ -146,6 +148,8 @@ impl Default for ScrapeConfig {
             failed_files: 0,
             start_time: Instant::now(),
             git_repo_path: None,
+            unglob_mode: false,
+            unglob_input_file: String::new(),
         }
     }
 }
@@ -290,7 +294,7 @@ fn print_usage(program_name: &str) {
     println!("  -s SIZE        Maximum file size in MB (default: {})", DEFAULT_MAX_FILE_SIZE / (1024 * 1024));
     println!("  -d             Include dot files (hidden files)");
     println!("  -p             Show progress indicators");
-    println!("  -u             [Deprecated] This option has no effect");
+    println!("  -u, --unglob FILE  Extract files from a previously generated LLM Globber output file");
     println!("  -e             Abort on errors (default is to continue)");
     println!("  -v             Verbose output");
     println!("  -q             Quiet mode (suppress all output)");
@@ -677,6 +681,88 @@ fn is_git_repository(path: &str) -> bool {
 }
 
 
+fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
+    info!("Unglobbing file: {}", config.unglob_input_file);
+    
+    let file = File::open(&config.unglob_input_file)
+        .map_err(|e| format!("Failed to open input file: {}: {}", config.unglob_input_file, e))?;
+    
+    let reader = BufReader::new(file);
+    let mut lines = reader.lines();
+    
+    let mut current_file: Option<String> = None;
+    let mut current_content: Vec<String> = Vec::new();
+    let mut files_extracted = 0;
+    let mut in_file_content = false;
+    
+    while let Some(line_result) = lines.next() {
+        let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
+        
+        // Check for file header
+        if line.starts_with("'''--- ") && line.ends_with(" ---") {
+            // If we were processing a file, write it out
+            if let Some(file_path) = current_file.take() {
+                write_extracted_file(&file_path, &current_content)
+                    .map_err(|e| format!("Failed to write file {}: {}", file_path, e))?;
+                files_extracted += 1;
+                current_content.clear();
+            }
+            
+            // Extract new file path
+            let file_path = line[7..line.len()-4].trim().to_string();
+            current_file = Some(file_path);
+            in_file_content = true;
+            continue;
+        }
+        
+        // Check for end of file marker
+        if line == "'''" && in_file_content {
+            in_file_content = false;
+            continue;
+        }
+        
+        // If we're in file content, add the line
+        if in_file_content && current_file.is_some() {
+            // Skip binary file markers
+            if line == "[Binary file - contents omitted]" {
+                current_file = None;
+                in_file_content = false;
+                continue;
+            }
+            
+            current_content.push(line);
+        }
+    }
+    
+    // Handle the last file if any
+    if let Some(file_path) = current_file {
+        write_extracted_file(&file_path, &current_content)
+            .map_err(|e| format!("Failed to write file {}: {}", file_path, e))?;
+        files_extracted += 1;
+    }
+    
+    if files_extracted == 0 {
+        return Err("No files were extracted from the input file".to_string());
+    }
+    
+    info!("Successfully extracted {} files", files_extracted);
+    Ok(())
+}
+
+fn write_extracted_file(file_path: &str, content: &[String]) -> io::Result<()> {
+    // Create directory structure if needed
+    if let Some(parent) = Path::new(file_path).parent() {
+        fs::create_dir_all(parent)?;
+    }
+    
+    let mut file = File::create(file_path)?;
+    for line in content {
+        writeln!(file, "{}", line)?;
+    }
+    
+    Ok(())
+}
+
 fn main() -> Result<(), String> {
     init_logger().map_err(|e| format!("Failed to initialize logger: {}", e))?;
 
@@ -760,10 +846,12 @@ fn main() -> Result<(), String> {
                 .help("Show progress indicators"),
         )
         .arg(
-            Arg::with_name("deprecated_u")
+            Arg::with_name("unglob")
                 .short('u')
-                .long("deprecated_u")
-                .hidden(true) //Just to acknowledge and ignore the option
+                .long("unglob")
+                .value_name("FILE")
+                .help("Extract files from a previously generated LLM Globber output file")
+                .takes_value(true)
         )
         .arg(
             Arg::with_name("abort_on_error")
@@ -801,7 +889,7 @@ fn main() -> Result<(), String> {
                 .value_name("FILES/DIRECTORIES")
                 .help("Files or directories to process")
                 .multiple(true)
-                .required_unless_one(&["git_repo", "help"])
+                .required_unless_one(&["git_repo", "help", "unglob"])
                 .min_values(1),
         )
         .get_matches();
@@ -867,6 +955,10 @@ fn main() -> Result<(), String> {
     }
     if matches.is_present("threads") {
         warn!("The -j option is deprecated and has no effect");
+    }
+    if let Some(unglob_file) = matches.value_of("unglob") {
+        config.unglob_mode = true;
+        config.unglob_input_file = unglob_file.to_string();
     }
     if let Some(size_str) = matches.value_of("max_size") {
         if let Ok(mb_size) = size_str.parse::<u64>() {
@@ -951,6 +1043,11 @@ fn main() -> Result<(), String> {
         }
     }
 
+    // If we're in unglob mode, process the input file
+    if config.unglob_mode {
+        return unglob_file(&config);
+    }
+
     if !found_input {
         return Err("Error: No input files or directories specified".to_string());
     }
@@ -958,7 +1055,6 @@ fn main() -> Result<(), String> {
     if config.file_entries.is_empty() {
         return Err("Error: No files found matching criteria".to_string());
     }
-
 
     match run_scraper(&mut config) {
         Ok(output_file) => {
