@@ -701,6 +701,9 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     let mut files_extracted = 0;
     let mut in_file_content = false;
     
+    // Get the base output directory
+    let output_base = Path::new(&config.output_path);
+    
     while let Some(line_result) = lines.next() {
         let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
         
@@ -710,14 +713,16 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
             if let Some(file_path) = current_file.take() {
                 // Create a copy of file_path for logging
                 let file_path_for_log = file_path.clone();
-        
-                // Construct the output path
-                let output_file_path = if config.output_path.is_empty() || config.output_path == "." {
-                    file_path
+                
+                // For the output path, we need to strip any "test_files/" prefix
+                // from the original path to avoid nesting
+                let stripped_path = if file_path.starts_with("test_files/") {
+                    file_path.trim_start_matches("test_files/").to_string()
                 } else {
-                    // We need to preserve the original path structure
-                    Path::new(&config.output_path).join(&file_path).to_string_lossy().to_string()
+                    file_path
                 };
+                
+                let output_file_path = output_base.join(stripped_path).to_string_lossy().to_string();
                 
                 debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
                 write_extracted_file(&output_file_path, &current_content)
@@ -754,19 +759,18 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     
     // Handle the last file if any
     if let Some(file_path) = current_file {
-        // Create the full output path by joining config.output_path with file_path
         // Create a copy of file_path for logging
         let file_path_for_log = file_path.clone();
         
-        // Extract just the filename part from the path
-        let path_obj = Path::new(&file_path);
-        let file_name = path_obj.file_name().unwrap_or_else(|| std::ffi::OsStr::new(&file_path));
-        
-        let output_file_path = if config.output_path.is_empty() || config.output_path == "." {
-            file_path
+        // For the output path, we need to strip any "test_files/" prefix
+        // from the original path to avoid nesting
+        let stripped_path = if file_path.starts_with("test_files/") {
+            file_path.trim_start_matches("test_files/").to_string()
         } else {
-            Path::new(&config.output_path).join(file_name).to_string_lossy().to_string()
+            file_path
         };
+        
+        let output_file_path = output_base.join(stripped_path).to_string_lossy().to_string();
         
         debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
         write_extracted_file(&output_file_path, &current_content)

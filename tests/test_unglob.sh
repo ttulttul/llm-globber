@@ -67,7 +67,8 @@ head -n 20 "$GLOBBED_FILE"
 
 # Step 5: Verify extracted files
 echo "Verifying extracted files..."
-EXTRACTED_CHECKSUMS=$(find test_files -type f -name "unglob_test*.txt" -o -path "*/subdir/*" | grep -v "test_files/test_files" | sort | xargs md5sum)
+# Use find with -not -path to exclude any nested test_files directories
+EXTRACTED_CHECKSUMS=$(find test_files -type f \( -name "unglob_test*.txt" -o -path "*/subdir/*" \) -not -path "*/test_files/test_files/*" | sort | xargs md5sum)
 echo "$EXTRACTED_CHECKSUMS"
 
 # Compare checksums
