@@ -141,7 +141,7 @@ impl Default for ScrapeConfig {
             output_file: None,
             output_mutex: Arc::new(Mutex::new(())),
             abort_on_error: false,
-            show_progress: true,
+            show_progress: false,
             processed_files: 0,
             failed_files: 0,
             start_time: Instant::now(),
@@ -192,10 +192,6 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
         if i % 10 == 0 {
             print_progress(&config);
         }
-    }
-
-    if config.show_progress && !config.quiet {
-        eprintln!(); // Newline after progress
     }
 
     if files_processed == 0 {
