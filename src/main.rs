@@ -709,6 +709,9 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
             // If we were processing a file, write it out
             if let Some(file_path) = current_file.take() {
                 // Create the full output path by joining config.output_path with file_path
+                // Create a copy of file_path for logging
+                let file_path_for_log = file_path.clone();
+                
                 let output_file_path = if config.output_path.is_empty() || config.output_path == "." {
                     file_path
                 } else {
@@ -723,7 +726,7 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
                     }
                 };
                 
-                debug!("Extracting file: {} to {}", file_path, output_file_path);
+                debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
                 write_extracted_file(&output_file_path, &current_content)
                     .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
                 files_extracted += 1;
@@ -759,6 +762,9 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     // Handle the last file if any
     if let Some(file_path) = current_file {
         // Create the full output path by joining config.output_path with file_path
+        // Create a copy of file_path for logging
+        let file_path_for_log = file_path.clone();
+        
         let output_file_path = if config.output_path.is_empty() || config.output_path == "." {
             file_path
         } else {
@@ -773,7 +779,7 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
             }
         };
         
-        debug!("Extracting file: {} to {}", file_path, output_file_path);
+        debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
         write_extracted_file(&output_file_path, &current_content)
             .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
         files_extracted += 1;
