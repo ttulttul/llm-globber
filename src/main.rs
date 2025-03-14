@@ -2,7 +2,7 @@ use std::fs::{self, File};
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::process::exit;
+use std::process::{exit, Command, Output};
 use std::str;
 use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
@@ -120,6 +120,7 @@ struct ScrapeConfig {
     processed_files: usize,
     failed_files: usize,
     start_time: Instant,
+    git_repo_path: Option<String>,
 }
 
 impl Default for ScrapeConfig {
@@ -144,6 +145,7 @@ impl Default for ScrapeConfig {
             processed_files: 0,
             failed_files: 0,
             start_time: Instant::now(),
+            git_repo_path: None,
         }
     }
 }
@@ -293,6 +295,7 @@ fn print_usage(program_name: &str) {
     println!("  -v             Verbose output");
     println!("  -q             Quiet mode (suppress all output)");
     println!("  -h             Show this help message");
+    println!("  --git PATH     Process a git repository (auto-configures path, name, and files)");
 }
 
 fn process_directory(config: &mut ScrapeConfig, dir_path: &str) -> Result<(), String> {
@@ -595,6 +598,82 @@ fn debug_dump_file(filename: &str) -> io::Result<()> {
     Ok(())
 }
 
+fn get_git_repo_name(repo_path: &str) -> Result<String, String> {
+    // Try to get the remote origin URL first
+    let output = Command::new("git")
+        .args(&["config", "--get", "remote.origin.url"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git command: {}", e))?;
+    
+    if output.status.success() {
+        let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        // Extract repo name from URL (handles both HTTPS and SSH URLs)
+        if let Some(repo_name) = url.split('/').last() {
+            return Ok(repo_name.trim_end_matches(".git").to_string());
+        }
+    }
+    
+    // Fallback: use the directory name
+    let path = Path::new(repo_path);
+    if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
+        Ok(dir_name.to_string())
+    } else {
+        Err("Could not determine repository name".to_string())
+    }
+}
+
+fn get_git_branch(repo_path: &str) -> Result<String, String> {
+    let output = Command::new("git")
+        .args(&["rev-parse", "--abbrev-ref", "HEAD"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git command: {}", e))?;
+    
+    if output.status.success() {
+        let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        Ok(branch)
+    } else {
+        Err(format!("Failed to get git branch: {}", 
+                   String::from_utf8_lossy(&output.stderr)))
+    }
+}
+
+fn get_git_tracked_files(repo_path: &str) -> Result<Vec<String>, String> {
+    let output = Command::new("git")
+        .args(&["ls-files"])
+        .current_dir(repo_path)
+        .output()
+        .map_err(|e| format!("Failed to execute git command: {}", e))?;
+    
+    if !output.status.success() {
+        return Err(format!("Failed to list git files: {}", 
+                          String::from_utf8_lossy(&output.stderr)));
+    }
+    
+    let files = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|line| {
+            let file_path = Path::new(repo_path).join(line.trim());
+            file_path.to_string_lossy().to_string()
+        })
+        .collect();
+    
+    Ok(files)
+}
+
+fn is_git_repository(path: &str) -> bool {
+    let output = Command::new("git")
+        .args(&["rev-parse", "--is-inside-work-tree"])
+        .current_dir(path)
+        .output();
+    
+    match output {
+        Ok(output) => output.status.success(),
+        Err(_) => false
+    }
+}
+
 
 fn main() -> Result<(), String> {
     init_logger().map_err(|e| format!("Failed to initialize logger: {}", e))?;
@@ -709,11 +788,18 @@ fn main() -> Result<(), String> {
                 .help("Show this help message"),
         )
         .arg(
+            Arg::with_name("git_repo")
+                .long("git")
+                .value_name("PATH")
+                .help("Process a git repository (auto-configures path, name, and files)")
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("input_paths")
                 .value_name("FILES/DIRECTORIES")
                 .help("Files or directories to process")
                 .multiple(true)
-                .required(true)
+                .required_unless("git_repo")
                 .min_values(1),
         )
         .get_matches();
@@ -723,16 +809,47 @@ fn main() -> Result<(), String> {
         exit(0);
     }
 
-    let output_path = matches
-        .value_of("output_path")
-        .ok_or("Error: Output path (-o) is required")?;
-    let output_filename = matches
-        .value_of("output_name")
-        .ok_or("Error: Output filename (-n) is required")?;
-
     let mut config = ScrapeConfig::default();
-    config.output_path = sanitize_path(output_path).map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
-    config.output_filename = output_filename.to_string();
+    
+    // Handle git repository option
+    if let Some(git_path) = matches.value_of("git_repo") {
+        // Verify this is a git repository
+        if !is_git_repository(git_path) {
+            return Err(format!("Error: {} is not a git repository", git_path));
+        }
+        
+        // Set git repo path
+        config.git_repo_path = Some(git_path.to_string());
+        
+        // Set output path to current directory if not specified
+        let output_path = matches.value_of("output_path").unwrap_or(".");
+        config.output_path = sanitize_path(output_path)
+            .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
+        
+        // Get repository name and branch for output filename
+        let repo_name = get_git_repo_name(git_path)?;
+        let branch_name = get_git_branch(git_path)?;
+        config.output_filename = format!("{}_{}", repo_name, branch_name);
+        
+        // Enable recursion
+        config.recursive = true;
+        
+        info!("Processing git repository: {}", git_path);
+        info!("Repository: {}, Branch: {}", repo_name, branch_name);
+        info!("Output will be: {}/{}.txt", config.output_path, config.output_filename);
+    } else {
+        // Standard mode - require output path and filename
+        let output_path = matches
+            .value_of("output_path")
+            .ok_or("Error: Output path (-o) is required")?;
+        let output_filename = matches
+            .value_of("output_name")
+            .ok_or("Error: Output filename (-n) is required")?;
+            
+        config.output_path = sanitize_path(output_path)
+            .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
+        config.output_filename = output_filename.to_string();
+    }
 
     if let Some(types_str) = matches.value_of("file_types") {
         parse_file_types(&mut config, types_str);
@@ -776,31 +893,58 @@ fn main() -> Result<(), String> {
 
     info!("Output path set to: '{}'", config.output_path);
 
-    let input_paths: Vec<&str> = matches.values_of("input_paths").unwrap().collect();
     let mut found_input = false;
-
-    for input_path_str in input_paths {
+    
+    // Process git repository if specified
+    if let Some(git_path) = &config.git_repo_path {
         found_input = true;
-        let input_path = PathBuf::from(input_path_str);
-
-        if !input_path.exists() {
-            warn!("Could not access path {}: Path does not exist", input_path_str);
-            continue;
+        
+        // Get all tracked files in the git repository
+        let git_files = get_git_tracked_files(git_path)?;
+        
+        if git_files.is_empty() {
+            return Err(format!("Error: No tracked files found in git repository: {}", git_path));
         }
-
-        if input_path.is_dir() {
-            if config.recursive {
-                process_directory(&mut config, &input_path_str)
-                    .map_err(|e| format!("Error processing directory {}: {}", input_path_str, e))?;
-            } else {
-                warn!(
-                    "{} is a directory. Use -r to process recursively.",
-                    input_path_str
-                );
+        
+        info!("Found {} tracked files in git repository", git_files.len());
+        
+        // Add all git tracked files to the file entries
+        for file_path in git_files {
+            let path = Path::new(&file_path);
+            if path.is_file() {
+                let base_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+                if should_process_file(&config, &file_path, base_name) {
+                    add_file_entry(&mut config, &file_path);
+                }
             }
-        } else if input_path.is_file() {
-            if should_process_file(&config, &input_path_str, input_path.file_name().and_then(|s| s.to_str()).unwrap_or("")) {
-                add_file_entry(&mut config, &input_path_str);
+        }
+    } else if let Some(input_paths) = matches.values_of("input_paths") {
+        // Standard mode - process specified input paths
+        let input_paths: Vec<&str> = input_paths.collect();
+        
+        for input_path_str in input_paths {
+            found_input = true;
+            let input_path = PathBuf::from(input_path_str);
+
+            if !input_path.exists() {
+                warn!("Could not access path {}: Path does not exist", input_path_str);
+                continue;
+            }
+
+            if input_path.is_dir() {
+                if config.recursive {
+                    process_directory(&mut config, &input_path_str)
+                        .map_err(|e| format!("Error processing directory {}: {}", input_path_str, e))?;
+                } else {
+                    warn!(
+                        "{} is a directory. Use -r to process recursively.",
+                        input_path_str
+                    );
+                }
+            } else if input_path.is_file() {
+                if should_process_file(&config, &input_path_str, input_path.file_name().and_then(|s| s.to_str()).unwrap_or("")) {
+                    add_file_entry(&mut config, &input_path_str);
+                }
             }
         }
     }
