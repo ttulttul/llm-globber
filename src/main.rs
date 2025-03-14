@@ -583,11 +583,12 @@ fn print_header(msg: &str) {
     if *GLOBAL_LOGGER.level.lock().unwrap() < LogLevel::Debug || *GLOBAL_LOGGER.quiet_mode.lock().unwrap() {
         return;
     }
-    println!();
-    println!("{}", "=".repeat(80));
-    println!("{}", msg);
-    println!("{}", "=".repeat(80));
-    println!();
+    // Only print to stdout if we're not in quiet mode
+    eprintln!();
+    eprintln!("{}", "=".repeat(80));
+    eprintln!("{}", msg);
+    eprintln!("{}", "=".repeat(80));
+    eprintln!();
 }
 
 
