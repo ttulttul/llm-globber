@@ -26,6 +26,8 @@
 #include <pwd.h>
 #include <grp.h>
 #include <pthread.h>
+#include <sys/wait.h> // Required for waitpid
+#include <getopt.h> // For getopt_long
 
 // Constants with reasonable limits
 #define MAX_PATH_LEN PATH_MAX
@@ -94,6 +96,7 @@ typedef struct ScrapeConfig {
     int processed_files;       // Counter for processed files
     int failed_files;          // Counter for failed files
     struct timeval start_time; // Start time for progress reporting
+    char git_repo_path[MAX_PATH_LEN]; // Path to git repository, if any
 } ScrapeConfig;
 
 // Global variables
@@ -143,6 +146,10 @@ void strip_trailing_slash(char *path);
 char* get_absolute_path(const char *path);
 void print_header(const char *msg);
 void debug_dump_file(const char *filename);
+int is_git_repository(const char *path);
+char* get_git_repo_name(const char *repo_path);
+char* get_git_branch(const char *repo_path);
+char** get_git_tracked_files(const char *repo_path, size_t *file_count);
 
 
 // Signal handler for clean termination
@@ -363,7 +370,7 @@ int init_config(ScrapeConfig *config) {
     config->max_file_size = DEFAULT_MAX_FILE_SIZE;
     config->abort_on_error = 0;
     config->show_progress = 1;
-    // thread_mode removed - always sequential now
+    config->git_repo_path[0] = '\0'; // Initialize git_repo_path as empty
 
     // Initialize mutex
     if (pthread_mutex_init(&config->output_mutex, NULL) != 0) {
@@ -388,7 +395,7 @@ int init_config(ScrapeConfig *config) {
 // Helper function to determine if a file should be processed
 int should_process_file(ScrapeConfig *config, const char *file_path, const char *base_name) {
     if (!config || !file_path || !base_name) return 0;
-    
+
     // Check if this is a dot file
     if (base_name[0] == '.') {
         if (config->no_dot_files) {
@@ -398,7 +405,7 @@ int should_process_file(ScrapeConfig *config, const char *file_path, const char 
             log_message(LOG_WARN, "Including dot file: %s", file_path);
         }
     }
-    
+
     // Check file size
     size_t file_size = get_file_size(file_path);
     if (file_size > config->max_file_size) {
@@ -406,34 +413,34 @@ int should_process_file(ScrapeConfig *config, const char *file_path, const char 
                    file_path, file_size, config->max_file_size);
         return 0;
     }
-    
+
     // Check name pattern if specified
     if (strlen(config->name_pattern) > 0) {
         if (fnmatch(config->name_pattern, base_name, 0) != 0) {
             return 0;
         }
     }
-    
+
     // Check file type filter if enabled
     if (config->filter_files && config->file_type_count > 0) {
         if (!is_allowed_file_type(config, file_path)) {
             return 0;
         }
     }
-    
+
     return 1;
 }
 
 // Helper function to write file content to output
 int write_file_content(ScrapeConfig *config, const char *file_path, const unsigned char *data, size_t size, int is_binary) {
     if (!config || !file_path) return 0;
-    
+
     // Lock the output file mutex for thread safety
     pthread_mutex_lock(&config->output_mutex);
-    
+
     // Write file header - use the full path
     fprintf(config->output_file, "'''--- %s ---\n", file_path);
-    
+
     // Handle binary files
     if (is_binary) {
         fprintf(config->output_file, "[Binary file - contents omitted]\n'''\n");
@@ -452,12 +459,12 @@ int write_file_content(ScrapeConfig *config, const char *file_path, const unsign
         }
         fprintf(config->output_file, "\n'''\n\n"); // Add closing marker with newline and an extra blank line
     }
-    
+
     fflush(config->output_file); // Ensure content is written
-    
+
     // Unlock the mutex
     pthread_mutex_unlock(&config->output_mutex);
-    
+
     return 1;
 }
 
@@ -846,7 +853,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
     // Get file basename for checking dot files
     char *path_copy = safe_strdup(file_path);
     char *base_name = basename(path_copy);
-    
+
     // Check if file should be processed
     if (!should_process_file(config, file_path, base_name)) {
         SAFE_FREE(path_copy);
@@ -875,7 +882,7 @@ int process_file_mmap(ScrapeConfig *config, const char *file_path, size_t file_s
 
     // Check for binary content
     int is_binary = (file_size > 0) ? is_binary_data(file_data, file_size) : 0;
-    
+
     // Write file content
     write_file_content(config, file_path, file_data, file_size, is_binary);
 
@@ -911,7 +918,7 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     // Get file basename for checking dot files
     char *path_copy = safe_strdup(file_path);
     char *base_name = basename(path_copy);
-    
+
     // Check if file should be processed
     if (!should_process_file(config, file_path, base_name)) {
         SAFE_FREE(path_copy);
@@ -948,10 +955,10 @@ int process_file(ScrapeConfig *config, const char *file_path) {
     size_t bytes_read;
 
     // Read the entire file into memory
-    while ((bytes_read = fread(buffer + total_bytes, 1, 
+    while ((bytes_read = fread(buffer + total_bytes, 1,
                               MIN(IO_BUFFER_SIZE - total_bytes, IO_BUFFER_SIZE), input)) > 0) {
         total_bytes += bytes_read;
-        
+
         // If buffer is full, expand it
         if (total_bytes == IO_BUFFER_SIZE) {
             buffer = safe_realloc(buffer, IO_BUFFER_SIZE * 2);
@@ -995,7 +1002,7 @@ void print_progress(ScrapeConfig *config) {
 // Print section header
 void print_header(const char *msg) {
     if (!msg) return;
-    
+
     // Only print headers in verbose mode
     if (g_log_level < LOG_DEBUG) return;
 
@@ -1013,7 +1020,7 @@ void debug_dump_file(const char *filename) {
         fprintf(stderr, "Cannot open %s for debug: %s\n", filename, strerror(errno));
         return;
     }
-    
+
     fprintf(stderr, "=== DEBUG DUMP of %s ===\n", filename);
     char buffer[1024];
     while (fgets(buffer, sizeof(buffer), f)) {
@@ -1076,11 +1083,11 @@ void process_directory(ScrapeConfig *config, const char *dir_path) {
             // Check if file should be processed
             char *path_copy = safe_strdup(full_path);
             char *base_name = basename(path_copy);
-            
+
             if (should_process_file(config, full_path, base_name)) {
                 add_file_entry(config, full_path);
             }
-            
+
             SAFE_FREE(path_copy);
         }
     }
@@ -1099,21 +1106,23 @@ char* run_scraper(ScrapeConfig *config) {
     gettimeofday(&config->start_time, NULL);
 
     // Sanitize output path
-    if (!sanitize_path(config->output_path, MAX_PATH_LEN)) {
+    if (strlen(config->output_path) > 0 && !sanitize_path(config->output_path, MAX_PATH_LEN)) {
         log_message(LOG_ERROR, "Invalid output path: %s", config->output_path);
         return NULL;
     }
 
     // Create output directory if it doesn't exist
-    struct stat st = {0};
-    if (stat(config->output_path, &st) == -1) {
-        // Create directory with secure permissions (rwxr-x---)
-        if (mkdir(config->output_path, 0750) != 0) {
-            log_message(LOG_ERROR, "Could not create output directory: %s (%s)",
-                       config->output_path, strerror(errno));
-            return NULL;
+    if (strlen(config->output_path) > 0) {
+        struct stat st = {0};
+        if (stat(config->output_path, &st) == -1) {
+            // Create directory with secure permissions (rwxr-x---)
+            if (mkdir(config->output_path, 0750) != 0) {
+                log_message(LOG_ERROR, "Could not create output directory: %s (%s)",
+                           config->output_path, strerror(errno));
+                return NULL;
+            }
+            log_message(LOG_INFO, "Created output directory: %s", config->output_path);
         }
-        log_message(LOG_INFO, "Created output directory: %s", config->output_path);
     }
 
 
@@ -1128,13 +1137,23 @@ char* run_scraper(ScrapeConfig *config) {
 
     // Create output filename
     char output_file[MAX_PATH_LEN];
-    int result = snprintf(output_file, MAX_PATH_LEN, "%s/%s_%s.txt",
-             config->output_path, config->output_filename, timestamp);
+    if (strlen(config->output_path) > 0) {
+        int result = snprintf(output_file, MAX_PATH_LEN, "%s/%s_%s.txt",
+                 config->output_path, config->output_filename, timestamp);
 
-    if (result < 0 || result >= MAX_PATH_LEN) {
-        log_message(LOG_ERROR, "Output path too long");
-        return NULL;
+        if (result < 0 || result >= MAX_PATH_LEN) {
+            log_message(LOG_ERROR, "Output path too long");
+            return NULL;
+        }
+    } else {
+        int result = snprintf(output_file, MAX_PATH_LEN, "%s_%s.txt",
+                 config->output_filename, timestamp);
+        if (result < 0 || result >= MAX_PATH_LEN) {
+            log_message(LOG_ERROR, "Output filename too long");
+            return NULL;
+        }
     }
+
 
     // Open output file and set buffer
     config->output_file = fopen(output_file, "w");
@@ -1236,7 +1255,7 @@ void print_usage(const char *program_name) {
     printf("  -t TYPES       File types to include (comma separated, e.g. '.c,.h,.txt')\n");
     printf("  -a             Include all files (no filtering by type)\n");
     printf("  -r             Recursively process directories\n");
-    printf("  -name PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')\n");
+    printf("  -N, --pattern PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')\n");
     printf("  -j THREADS     [Deprecated] Number of worker threads (always 1)\n");
     printf("  -s SIZE        Maximum file size in MB (default: %d)\n",
            (int)(DEFAULT_MAX_FILE_SIZE / (1024 * 1024)));
@@ -1247,6 +1266,7 @@ void print_usage(const char *program_name) {
     printf("  -v             Verbose output\n");
     printf("  -q             Quiet mode (suppress all output)\n");
     printf("  -h             Show this help message\n");
+    printf("     --git PATH  Process a git repository (auto-configures path, name, and files)\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -1261,80 +1281,183 @@ int main(int argc, char *argv[]) {
         return EXIT_ARGS_ERROR;
     }
 
-    // Process all arguments manually
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "-o") == 0 && i + 1 < argc) {
-            strncpy(config.output_path, argv[i+1], MAX_PATH_LEN - 1);
-            config.output_path[MAX_PATH_LEN - 1] = '\0';
-            i++; // Skip the value
-        } else if (strcmp(argv[i], "-n") == 0 && i + 1 < argc) {
-            strncpy(config.output_filename, argv[i+1], MAX_PATH_LEN - 1);
-            config.output_filename[MAX_PATH_LEN - 1] = '\0';
-            i++; // Skip the value
-        } else if (strcmp(argv[i], "-t") == 0 && i + 1 < argc) {
-            parse_file_types(&config, argv[i+1]);
-            i++; // Skip the value
-        } else if (strcmp(argv[i], "-a") == 0) {
-            config.filter_files = 0;
-        } else if (strcmp(argv[i], "-r") == 0) {
-            config.recursive = 1;
-        } else if (strcmp(argv[i], "-name") == 0 && i + 1 < argc) {
-            strncpy(config.name_pattern, argv[i+1], MAX_PATH_LEN - 1);
-            config.name_pattern[MAX_PATH_LEN - 1] = '\0';
-            i++; // Skip the value
-        } else if (strcmp(argv[i], "-j") == 0 && i + 1 < argc) {
-            log_message(LOG_WARN, "The -j option is deprecated and has no effect");
-            i++; // Skip the value
-        } else if (strcmp(argv[i], "-s") == 0 && i + 1 < argc) {
-            // Size in MB
-            int mb_size = atoi(argv[i+1]);
-            if (mb_size > 0) {
-                config.max_file_size = (size_t)mb_size * 1024 * 1024;
+    // Define long options for getopt_long
+    struct option long_options[] = {
+        {"output",      required_argument, 0, 'o'},
+        {"name",        required_argument, 0, 'n'},
+        {"types",       required_argument, 0, 't'},
+        {"all",         no_argument,       0, 'a'},
+        {"recursive",   no_argument,       0, 'r'},
+        {"pattern",     required_argument, 0, 'N'},
+        {"threads",     required_argument, 0, 'j'},
+        {"size",        required_argument, 0, 's'},
+        {"dot",         no_argument,       0, 'd'},
+        {"progress",    no_argument,       0, 'p'},
+        {"deprecated_u", no_argument,       0, 'u'}, // Hidden and deprecated option
+        {"abort-on-error", no_argument,    0, 'e'},
+        {"verbose",     no_argument,       0, 'v'},
+        {"quiet",       no_argument,       0, 'q'},
+        {"help",        no_argument,       0, 'h'},
+        {"git",         required_argument, 0, 'g'}, // New git option
+        {0, 0, 0, 0} // End of options array
+    };
+
+    int option_index = 0;
+    int c;
+
+    while ((c = getopt_long(argc, argv, "o:n:t:arn:j:s:dpuqvheN:", long_options, &option_index)) != -1) {
+        switch (c) {
+            case 'o':
+                strncpy(config.output_path, optarg, MAX_PATH_LEN - 1);
+                config.output_path[MAX_PATH_LEN - 1] = '\0';
+                break;
+            case 'n':
+                strncpy(config.output_filename, optarg, MAX_PATH_LEN - 1);
+                config.output_filename[MAX_PATH_LEN - 1] = '\0';
+                break;
+            case 't':
+                parse_file_types(&config, optarg);
+                break;
+            case 'a':
+                config.filter_files = 0;
+                break;
+            case 'r':
+                config.recursive = 1;
+                break;
+            case 'N': // Use 'N' for --pattern to avoid conflict with 'name'
+                strncpy(config.name_pattern, optarg, MAX_PATH_LEN - 1);
+                config.name_pattern[MAX_PATH_LEN - 1] = '\0';
+                break;
+            case 'j':
+                log_message(LOG_WARN, "The -j option is deprecated and has no effect");
+                break;
+            case 's': {
+                // Size in MB
+                int mb_size = atoi(optarg);
+                if (mb_size > 0) {
+                    config.max_file_size = (size_t)mb_size * 1024 * 1024;
+                }
+                break;
             }
-            i++; // Skip the value
-        } else if (strcmp(argv[i], "-d") == 0) {
-            config.no_dot_files = 0;
-        } else if (strcmp(argv[i], "-p") == 0) {
-            config.show_progress = 1;
-        } else if (strcmp(argv[i], "-u") == 0) {
-            log_message(LOG_WARN, "The -u option is deprecated and has no effect");
-        } else if (strcmp(argv[i], "-e") == 0) {
-            config.abort_on_error = 1;
-        } else if (strcmp(argv[i], "-v") == 0) {
-            config.verbose = 1;
-            g_log_level = LOG_DEBUG;
-        } else if (strcmp(argv[i], "-q") == 0) {
-            config.quiet = 1;
-            g_quiet_mode = 1;
-        } else if (strcmp(argv[i], "-h") == 0) {
+            case 'd':
+                config.no_dot_files = 0;
+                break;
+            case 'p':
+                config.show_progress = 1;
+                break;
+            case 'u':
+                log_message(LOG_WARN, "The -u option is deprecated and has no effect");
+                break;
+            case 'e':
+                config.abort_on_error = 1;
+                break;
+            case 'v':
+                config.verbose = 1;
+                g_log_level = LOG_DEBUG;
+                break;
+            case 'q':
+                config.quiet = 1;
+                g_quiet_mode = 1;
+                break;
+            case 'h':
+                print_usage(argv[0]);
+                free_config(&config);
+                return EXIT_OK;
+            case 'g': // Handle --git option
+                strncpy(config.git_repo_path, optarg, MAX_PATH_LEN - 1);
+                config.git_repo_path[MAX_PATH_LEN - 1] = '\0';
+                break;
+            case '?':
+                // getopt_long already printed an error message.
+                print_usage(argv[0]);
+                free_config(&config);
+                return EXIT_ARGS_ERROR;
+            default:
+                print_usage(argv[0]);
+                free_config(&config);
+                return EXIT_ARGS_ERROR;
+        }
+    }
+
+    // Handle git repository mode
+    if (config.git_repo_path[0] != '\0') {
+        if (!is_git_repository(config.git_repo_path)) {
+            log_message(LOG_ERROR, "Error: %s is not a git repository", config.git_repo_path);
+            free_config(&config);
+            return EXIT_ARGS_ERROR;
+        }
+
+        if (strlen(config.output_path) == 0) {
+            strncpy(config.output_path, ".", MAX_PATH_LEN - 1); // Default output path to current dir
+            config.output_path[MAX_PATH_LEN - 1] = '\0';
+        }
+        if (strlen(config.output_filename) == 0) {
+             char *repo_name = get_git_repo_name(config.git_repo_path);
+             char *branch_name = get_git_branch(config.git_repo_path);
+             if (repo_name && branch_name) {
+                snprintf(config.output_filename, MAX_PATH_LEN, "%s_%s", repo_name, branch_name);
+                SAFE_FREE(repo_name);
+                SAFE_FREE(branch_name);
+             } else {
+                strncpy(config.output_filename, "git_repo_files", MAX_PATH_LEN - 1);
+                config.output_filename[MAX_PATH_LEN - 1] = '\0';
+             }
+        }
+        config.recursive = 1; // Enable recursive for git repos
+
+        size_t git_file_count = 0;
+        char **git_files = get_git_tracked_files(config.git_repo_path, &git_file_count);
+        if (git_files != NULL) {
+            if (git_file_count == 0) {
+                log_message(LOG_ERROR, "Error: No tracked files found in git repository: %s", config.git_repo_path);
+                // Free git_files even if empty to avoid memory leak
+                for(size_t i = 0; i < git_file_count; ++i) {
+                    SAFE_FREE(git_files[i]);
+                }
+                SAFE_FREE(git_files);
+                free_config(&config);
+                return EXIT_ARGS_ERROR;
+            }
+
+            log_message(LOG_INFO, "Found %zu tracked files in git repository", git_file_count);
+            for (size_t i = 0; i < git_file_count; ++i) {
+                char full_path[MAX_PATH_LEN];
+                if (!join_path(full_path, MAX_PATH_LEN, config.git_repo_path, git_files[i])) {
+                    log_message(LOG_WARN, "Path too long: %s/%s", config.git_repo_path, git_files[i]);
+                    continue;
+                }
+                char *path_copy = safe_strdup(full_path);
+                char *base_name = basename(path_copy);
+                if (should_process_file(&config, full_path, base_name)) {
+                    add_file_entry(&config, full_path);
+                }
+                SAFE_FREE(path_copy);
+                SAFE_FREE(git_files[i]); // Free each file path after use
+            }
+            SAFE_FREE(git_files); // Free the array of file paths
+        } else {
+            log_message(LOG_ERROR, "Failed to get tracked files from git repository: %s", config.git_repo_path);
+            free_config(&config);
+            return EXIT_RUNTIME_ERROR;
+        }
+
+    } else {
+        // Standard mode - require output path and filename
+        if (strlen(config.output_path) == 0) {
+            log_message(LOG_ERROR, "Error: Output path (-o) is required");
             print_usage(argv[0]);
             free_config(&config);
-            return EXIT_OK;
-        } else if (argv[i][0] == '-') {
-            log_message(LOG_ERROR, "Unknown option: %s", argv[i]);
+            return EXIT_ARGS_ERROR;
+        }
+
+        if (strlen(config.output_filename) == 0) {
+            log_message(LOG_ERROR, "Error: Output filename (-n) is required when not using --git");
             print_usage(argv[0]);
             free_config(&config);
             return EXIT_ARGS_ERROR;
         }
     }
 
-    // Check required arguments
-    if (strlen(config.output_path) == 0) {
-        log_message(LOG_ERROR, "Error: Output path (-o) is required");
-        print_usage(argv[0]);
-        free_config(&config);
-        return EXIT_ARGS_ERROR;
-    }
-
-    // Debugging
-    log_message(LOG_DEBUG, "Output path set to: '%s'", config.output_path);
-
-    if (strlen(config.output_filename) == 0) {
-        log_message(LOG_ERROR, "Error: Output filename (-n) is required");
-        print_usage(argv[0]);
-        free_config(&config);
-        return EXIT_ARGS_ERROR;
-    }
 
     // Set log level based on verbose flag (if not in quiet mode)
     if (!config.quiet) {
@@ -1347,20 +1470,7 @@ int main(int argc, char *argv[]) {
 
     // Process each file or directory argument
     int found_input = 0;
-    for (int i = 1; i < argc; i++) {
-        // Skip options and their values
-        if (argv[i][0] == '-') {
-            if (strcmp(argv[i], "-o") == 0 ||
-                strcmp(argv[i], "-n") == 0 ||
-                strcmp(argv[i], "-t") == 0 ||
-                strcmp(argv[i], "-name") == 0 ||
-                strcmp(argv[i], "-j") == 0 ||
-                strcmp(argv[i], "-s") == 0) {
-                i++; // Skip the value
-            }
-            continue;
-        }
-
+    for (int i = optind; i < argc; i++) {
         found_input = 1;
 
         // Check if path exists
@@ -1381,23 +1491,24 @@ int main(int argc, char *argv[]) {
             // It's a file - check if it should be processed
             char *path_copy = safe_strdup(argv[i]);
             char *base_name = basename(path_copy);
-            
+
             if (should_process_file(&config, argv[i], base_name)) {
                 add_file_entry(&config, argv[i]);
             }
-            
+
             SAFE_FREE(path_copy);
         }
     }
 
-    if (!found_input) {
+    // In git mode, input paths from command line are ignored.
+    if (!found_input && config.git_repo_path[0] == '\0') {
         log_message(LOG_ERROR, "Error: No input files or directories specified");
         print_usage(argv[0]);
         free_config(&config);
         return EXIT_ARGS_ERROR;
     }
 
-    if (config.file_entry_count == 0) {
+    if (config.file_entry_count == 0 && config.git_repo_path[0] == '\0') {
         log_message(LOG_ERROR, "Error: No files found matching criteria");
         free_config(&config);
         return EXIT_ARGS_ERROR;
@@ -1429,4 +1540,120 @@ int main(int argc, char *argv[]) {
     free_config(&config);
 
     return result;
+}
+
+
+int is_git_repository(const char *path) {
+    if (!path) return 0;
+    char command[MAX_PATH_LEN + 50];
+    snprintf(command, sizeof(command), "git -C \"%s\" rev-parse --is-inside-work-tree 2>/dev/null", path);
+    if (system(command) == 0) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+char* get_git_repo_name(const char *repo_path) {
+    if (!repo_path) return NULL;
+    FILE *fp;
+    char path[MAX_PATH_LEN];
+    char command[MAX_PATH_LEN + 100];
+    snprintf(command, sizeof(command), "git -C \"%s\" config --get remote.origin.url 2>/dev/null", repo_path);
+
+    fp = popen(command, "r");
+    if (fp == NULL) {
+        log_message(LOG_ERROR, "Failed to run git config command");
+        return NULL;
+    }
+
+    if (fgets(path, sizeof(path), fp) != NULL) {
+        pclose(fp);
+        // Basic URL parsing to extract repo name - improve as needed
+        char *repo_name_start = strrchr(path, '/');
+        if (repo_name_start) {
+            char *repo_name = safe_strdup(repo_name_start + 1);
+            // Remove .git suffix if present
+            size_t len = strlen(repo_name);
+            if (len > 4 && strcmp(repo_name + len - 4, ".git") == 0) {
+                repo_name[len - 4] = '\0';
+            }
+            // Remove trailing newline if present
+            len = strlen(repo_name);
+            if (len > 0 && repo_name[len - 1] == '\n') {
+                repo_name[len - 1] = '\0';
+            }
+            return repo_name;
+        }
+    }
+    pclose(fp);
+    // Fallback to directory name
+    return safe_strdup(basename((char*)repo_path));
+}
+
+
+char* get_git_branch(const char *repo_path) {
+    if (!repo_path) return NULL;
+    FILE *fp;
+    char branch[MAX_PATH_LEN];
+    char command[MAX_PATH_LEN + 100];
+    snprintf(command, sizeof(command), "git -C \"%s\" rev-parse --abbrev-ref HEAD 2>/dev/null", repo_path);
+
+    fp = popen(command, "r");
+    if (fp == NULL) {
+        log_message(LOG_ERROR, "Failed to run git rev-parse command");
+        return NULL;
+    }
+
+    if (fgets(branch, sizeof(branch), fp) != NULL) {
+        pclose(fp);
+        // Remove trailing newline
+        size_t len = strlen(branch);
+        if (len > 0 && branch[len - 1] == '\n') {
+            branch[len - 1] = '\0';
+        }
+        return safe_strdup(branch);
+    }
+    pclose(fp);
+    return safe_strdup("unknown_branch"); // Default branch name if detection fails
+}
+
+
+char** get_git_tracked_files(const char *repo_path, size_t *file_count) {
+    if (!repo_path) return NULL;
+    FILE *fp;
+    char buffer[IO_BUFFER_SIZE];
+    char command[MAX_PATH_LEN + 100];
+    snprintf(command, sizeof(command), "git -C \"%s\" ls-files 2>/dev/null", repo_path);
+
+    fp = popen(command, "r");
+    if (fp == NULL) {
+        log_message(LOG_ERROR, "Failed to run git ls-files command");
+        return NULL;
+    }
+
+    char **files = NULL;
+    size_t count = 0;
+    size_t capacity = 10; // Initial capacity
+
+    files = safe_malloc(capacity * sizeof(char*));
+    *file_count = 0;
+
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+        // Remove trailing newline
+        size_t len = strlen(buffer);
+        if (len > 0 && buffer[len - 1] == '\n') {
+            buffer[len - 1] = '\0';
+        }
+
+        if (count >= capacity) {
+            capacity *= 2;
+            files = safe_realloc(files, capacity * sizeof(char*));
+        }
+        files[count++] = safe_strdup(buffer);
+    }
+
+    pclose(fp);
+    *file_count = count;
+    return files;
 }
