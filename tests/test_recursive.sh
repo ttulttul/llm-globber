@@ -21,9 +21,9 @@ C_FILES=$(find $TEST_DIR -name "*.c" | sort)
 
 # Add each file to the expected output
 for file in $C_FILES; do
-    filename=$(basename "$file")
+    # Use the full path instead of just the filename
     echo "" >> $EXPECTED_OUTPUT
-    echo "'''--- $filename ---" >> $EXPECTED_OUTPUT
+    echo "'''--- $(pwd)/$file ---" >> $EXPECTED_OUTPUT
     cat "$file" >> $EXPECTED_OUTPUT
     echo "" >> $EXPECTED_OUTPUT
     echo "'''" >> $EXPECTED_OUTPUT
@@ -51,6 +51,12 @@ fi
 EXPECTED_FILE_COUNT=$(grep -c "^'''\-\-\-" $EXPECTED_OUTPUT)
 ACTUAL_FILE_COUNT=$(grep -c "^'''\-\-\-" $ACTUAL_OUTPUT)
 
+# Check if the output file exists and has content
+if [ ! -s "$ACTUAL_OUTPUT" ]; then
+    echo "Error: Output file is empty or doesn't exist: $ACTUAL_OUTPUT"
+    exit 1
+fi
+
 if [ "$EXPECTED_FILE_COUNT" = "$ACTUAL_FILE_COUNT" ]; then
     echo "Recursive test passed: Found $ACTUAL_FILE_COUNT files as expected"
     exit 0
@@ -60,5 +66,12 @@ else
     grep "^'''\-\-\-" $EXPECTED_OUTPUT
     echo "Actual files:"
     grep "^'''\-\-\-" $ACTUAL_OUTPUT
+    
+    # Print the error message if it exists in the output
+    ERROR_MSG=$(grep "Error:" "$ACTUAL_OUTPUT" 2>/dev/null)
+    if [ -n "$ERROR_MSG" ]; then
+        echo "Error found in output: $ERROR_MSG"
+    fi
+    
     exit 1
 fi
