@@ -285,7 +285,7 @@ fn print_usage(program_name: &str) {
     println!("Usage: {} [options] [files/directories...]", program_name);
     println!("Options:");
     println!("  -o PATH        Output directory path");
-    println!("  -n NAME        Output filename (without extension) - not required with --git");
+    println!("  -n NAME        Output filename (without extension) - not required with --git or --unglob");
     println!("  -t TYPES       File types to include (comma separated, e.g. '.c,.h,.txt')");
     println!("  -a             Include all files (no filtering by type)");
     println!("  -r             Recursively process directories");
@@ -789,7 +789,7 @@ fn main() -> Result<(), String> {
                 .short('n')
                 .long("name")
                 .value_name("NAME")
-                .help("Output filename (without extension) - not required with --git")
+                .help("Output filename (without extension) - not required with --git or --unglob")
                 .takes_value(true),
         )
         .arg(
@@ -933,6 +933,18 @@ fn main() -> Result<(), String> {
         info!("Processing git repository: {}", git_path);
         info!("Repository: {}, Branch: {}", repo_name, branch_name);
         info!("Output will be: {}/{}.txt", config.output_path, config.output_filename);
+    } else if config.unglob_mode {
+        // Unglob mode - output path and filename are optional
+        if let Some(output_path) = matches.value_of("output_path") {
+            config.output_path = sanitize_path(output_path)
+                .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
+        } else {
+            config.output_path = ".".to_string(); // Default to current directory
+        }
+        
+        if let Some(output_filename) = matches.value_of("output_name") {
+            config.output_filename = output_filename.to_string();
+        }
     } else {
         // Standard mode - require output path and filename
         let output_path = matches
@@ -991,7 +1003,9 @@ fn main() -> Result<(), String> {
         config.abort_on_error = true;
     }
 
-    info!("Output path set to: '{}'", config.output_path);
+    if !config.unglob_mode || matches.is_present("output_path") {
+        info!("Output path set to: '{}'", config.output_path);
+    }
 
     let mut found_input = false;
     
