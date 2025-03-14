@@ -708,22 +708,15 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
         if line.starts_with("'''--- ") && line.ends_with(" ---") {
             // If we were processing a file, write it out
             if let Some(file_path) = current_file.take() {
-                // Create the full output path by joining config.output_path with file_path
                 // Create a copy of file_path for logging
                 let file_path_for_log = file_path.clone();
-                
+        
+                // Construct the output path
                 let output_file_path = if config.output_path.is_empty() || config.output_path == "." {
                     file_path
                 } else {
-                    // Handle absolute paths in file_path
-                    let path_obj = Path::new(&file_path);
-                    if path_obj.is_absolute() {
-                        // For absolute paths, strip the leading / and join with output_path
-                        let rel_path = path_obj.strip_prefix("/").unwrap_or(path_obj);
-                        Path::new(&config.output_path).join(rel_path).to_string_lossy().to_string()
-                    } else {
-                        Path::new(&config.output_path).join(&file_path).to_string_lossy().to_string()
-                    }
+                    // We need to preserve the original path structure
+                    Path::new(&config.output_path).join(&file_path).to_string_lossy().to_string()
                 };
                 
                 debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
@@ -765,18 +758,14 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
         // Create a copy of file_path for logging
         let file_path_for_log = file_path.clone();
         
+        // Extract just the filename part from the path
+        let path_obj = Path::new(&file_path);
+        let file_name = path_obj.file_name().unwrap_or_else(|| std::ffi::OsStr::new(&file_path));
+        
         let output_file_path = if config.output_path.is_empty() || config.output_path == "." {
             file_path
         } else {
-            // Handle absolute paths in file_path
-            let path_obj = Path::new(&file_path);
-            if path_obj.is_absolute() {
-                // For absolute paths, strip the leading / and join with output_path
-                let rel_path = path_obj.strip_prefix("/").unwrap_or(path_obj);
-                Path::new(&config.output_path).join(rel_path).to_string_lossy().to_string()
-            } else {
-                Path::new(&config.output_path).join(&file_path).to_string_lossy().to_string()
-            }
+            Path::new(&config.output_path).join(file_name).to_string_lossy().to_string()
         };
         
         debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
@@ -806,6 +795,11 @@ fn write_extracted_file(file_path: &str, content: &[String]) -> io::Result<()> {
     if !content.is_empty() {
         let joined_content = content.join("\n");
         file.write_all(joined_content.as_bytes())?;
+        
+        // Add a final newline if the content doesn't end with one
+        if !joined_content.ends_with('\n') {
+            file.write_all(b"\n")?;
+        }
     }
     
     Ok(())

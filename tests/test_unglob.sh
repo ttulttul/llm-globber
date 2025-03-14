@@ -53,6 +53,9 @@ cp -r test_files/* test_files_backup/
 rm -f test_files/unglob_test*.txt
 rm -rf test_files/subdir
 
+# Create a directory structure that matches the expected output
+mkdir -p test_files
+
 # Step 4: Run unglob to extract files
 echo "Running unglob to extract files..."
 echo "Command: ../target/release/llm_globber -u $GLOBBED_FILE -o test_files -v"
@@ -64,7 +67,7 @@ head -n 20 "$GLOBBED_FILE"
 
 # Step 5: Verify extracted files
 echo "Verifying extracted files..."
-EXTRACTED_CHECKSUMS=$(find test_files -type f -name "unglob_test*.txt" -o -path "*/subdir/*" | sort | xargs md5sum)
+EXTRACTED_CHECKSUMS=$(find test_files -type f -name "unglob_test*.txt" -o -path "*/subdir/*" | grep -v "test_files/test_files" | sort | xargs md5sum)
 echo "$EXTRACTED_CHECKSUMS"
 
 # Compare checksums
