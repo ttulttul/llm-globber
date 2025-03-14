@@ -69,7 +69,7 @@ OPTIONS:
     -e, --abort-on-error       Abort on errors (default is to continue)
     -h, --help                 Show this help message
     -j, --threads <THREADS>    [Deprecated] Number of worker threads (always 1)
-    -n, --name <NAME>          Output filename (without extension)
+    -n, --name <NAME>          Output filename (without extension) - not required with --git
     -N, --pattern <PATTERN>    Filter files by name pattern (glob syntax, e.g., '*.c')
     -o, --output <PATH>        Output directory path
     -p, --progress             Show progress indicators (disabled by default)
@@ -79,6 +79,7 @@ OPTIONS:
     -t, --types <TYPES>        File types to include (comma separated, e.g., '.c,.h,.txt')
     -v, --verbose              Verbose output
     -V, --version              Print version information
+    --git <PATH>               Process a git repository (auto-configures path, name, and files)
 ```
 
 ### Examples
