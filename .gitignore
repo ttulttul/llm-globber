@@ -62,3 +62,9 @@ Cargo.lock
 # Aider etc
 .aider*
 .env
+
+# Project specific
+llm_globber_c
+tests/output/
+tests/test_files/
+tests/test_output/
