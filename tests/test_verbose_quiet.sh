@@ -17,8 +17,7 @@ OUTPUT_DIR="$(pwd)/test_output"
 mkdir -p "$OUTPUT_DIR"
 
 echo "Testing verbose mode..."
-# Use -u flag to disable sandbox mode for testing
-../target/release/llm_globber -o "$OUTPUT_DIR" -n verbose_test -v -u "$TEST_DIR/test.txt" 2> verbose_output.txt
+../target/release/llm_globber -o "$OUTPUT_DIR" -n verbose_test -v "$TEST_DIR/test.txt" 2> verbose_output.txt
 
 # Check if verbose output contains INFO and DEBUG messages
 if grep -q "INFO:" verbose_output.txt; then
@@ -32,8 +31,7 @@ fi
 
 # Run llm_globber in quiet mode
 echo "Testing quiet mode..."
-# Use -u flag to disable sandbox mode for testing
-../target/release/llm_globber -o "$OUTPUT_DIR" -n quiet_test -q -u "$TEST_DIR/test.txt" 2> quiet_output.txt
+../target/release/llm_globber -o "$OUTPUT_DIR" -n quiet_test -q "$TEST_DIR/test.txt" 2> quiet_output.txt
 
 # Check if quiet mode suppresses all output
 if [ -s quiet_output.txt ]; then
@@ -47,8 +45,7 @@ fi
 
 # Run llm_globber in default mode
 echo "Testing default mode..."
-# Use -u flag to disable sandbox mode for testing
-../target/release/llm_globber -o "$OUTPUT_DIR" -n default_test -u "$TEST_DIR/test.txt" 2> default_output.txt
+../target/release/llm_globber -o "$OUTPUT_DIR" -n default_test "$TEST_DIR/test.txt" 2> default_output.txt
 
 # Check if default mode shows only warnings and errors
 DEFAULT_TEST_PASSED=true

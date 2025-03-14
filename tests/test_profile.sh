@@ -98,7 +98,7 @@ TRACE_FILE="$TRACE_DIR/llm_globber_profile_$TIMESTAMP.trace"
 
 # Build the command to run
 EXECUTABLE="../target/release/llm_globber"
-ARGS="-o $OUTPUT_DIR -n profile_test -u -j 1 -v $TEST_FILES"
+ARGS="-o $OUTPUT_DIR -n profile_test -j 1 -v $TEST_FILES"
 
 echo "Running xctrace with Time Profiler template on: $EXECUTABLE $ARGS"
 # Run with xcrun xctrace to collect performance data

@@ -31,7 +31,6 @@ done
 
 # Run llm_globber with name pattern filter
 OUTPUT_DIR="$(pwd)/test_output"
-# Use -u flag to disable sandbox mode for testing
 ../target/release/llm_globber -o "$OUTPUT_DIR" -n name_pattern_test --pattern "test*.c" -r "$TEST_DIR"
 
 # Find the generated output file (most recent in the directory)
