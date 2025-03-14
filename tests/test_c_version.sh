@@ -54,8 +54,8 @@ fi
 # Test file type filtering
 print_header "Testing C version file type filtering"
 
-# Run with only .c file type
-"$C_GLOBBER" -o test_output -n c_version_filter_test -t .c test_files/c_test
+# Run with only .c file type (adding -r flag to process directory recursively)
+"$C_GLOBBER" -o test_output -n c_version_filter_test -t .c -r test_files/c_test
 
 # Find the generated output file
 FILTER_OUTPUT=$(find test_output -name "c_version_filter_test_*.txt" | sort -r | head -1)

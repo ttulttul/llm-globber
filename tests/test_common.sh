@@ -57,7 +57,7 @@ print_header() {
 
 # Function to print test result
 print_result() {
-    if [ "$2" = true ] || [ "$2" -eq 0 ]; then
+    if [ "$2" = "true" ] || [ "$2" = "0" ]; then
         echo -e "${GREEN}✓ $1${NC}"
     else
         echo -e "${RED}✗ $1${NC}"
