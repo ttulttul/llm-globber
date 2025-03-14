@@ -684,6 +684,12 @@ fn is_git_repository(path: &str) -> bool {
 fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     info!("Unglobbing file: {}", config.unglob_input_file);
     
+    // Check if the path is a directory
+    let path = Path::new(&config.unglob_input_file);
+    if path.is_dir() {
+        return Err(format!("Error: '{}' is a directory, not a file", config.unglob_input_file));
+    }
+    
     let file = File::open(&config.unglob_input_file)
         .map_err(|e| format!("Failed to open input file: {}: {}", config.unglob_input_file, e))?;
     
