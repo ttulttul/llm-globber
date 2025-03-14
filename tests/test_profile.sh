@@ -101,8 +101,8 @@ EXECUTABLE="../target/release/llm_globber"
 ARGS="-o $OUTPUT_DIR -n profile_test -u -j 1 -v $TEST_FILES"
 
 echo "Running xctrace with Time Profiler template on: $EXECUTABLE $ARGS"
-# Run with xcrun xctrace to collect performance data
-xcrun xctrace record --template "Time Profiler" --output "$TRACE_FILE" --launch -- "$EXECUTABLE" $ARGS
+# Run with xcrun xctrace to collect performance data with microsecond precision
+xcrun xctrace record --template "Time Profiler" --output "$TRACE_FILE" --time-unit microseconds --launch -- "$EXECUTABLE" $ARGS
 
 # Check if xctrace was successful
 if [ $? -ne 0 ]; then
