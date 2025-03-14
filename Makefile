@@ -51,6 +51,6 @@ c-test: $(C_TARGET)
 
 # Profile target using cargo-flamegraph
 profile:
-	cargo flamegraph --release --bin $(PROJECT_NAME) -- --recursive .
+	cd tests && ./test_profile.sh
 
 .PHONY: all clean test rust-test bash-test c-test profile
