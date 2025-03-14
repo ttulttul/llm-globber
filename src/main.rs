@@ -933,8 +933,11 @@ fn main() -> Result<(), String> {
         info!("Processing git repository: {}", git_path);
         info!("Repository: {}, Branch: {}", repo_name, branch_name);
         info!("Output will be: {}/{}.txt", config.output_path, config.output_filename);
-    } else if config.unglob_mode {
+    } else if let Some(unglob_file) = matches.value_of("unglob") {
         // Unglob mode - output path and filename are optional
+        config.unglob_mode = true;
+        config.unglob_input_file = unglob_file.to_string();
+        
         if let Some(output_path) = matches.value_of("output_path") {
             config.output_path = sanitize_path(output_path)
                 .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
@@ -952,7 +955,7 @@ fn main() -> Result<(), String> {
             .ok_or("Error: Output path (-o) is required")?;
         let output_filename = matches
             .value_of("output_name")
-            .ok_or("Error: Output filename (-n) is required when not using --git")?;
+            .ok_or("Error: Output filename (-n) is required when not using --git or --unglob")?;
             
         config.output_path = sanitize_path(output_path)
             .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
@@ -974,10 +977,7 @@ fn main() -> Result<(), String> {
     if matches.is_present("threads") {
         warn!("The -j option is deprecated and has no effect");
     }
-    if let Some(unglob_file) = matches.value_of("unglob") {
-        config.unglob_mode = true;
-        config.unglob_input_file = unglob_file.to_string();
-    }
+    // Note: unglob file is now handled earlier in the code
     if let Some(size_str) = matches.value_of("max_size") {
         if let Ok(mb_size) = size_str.parse::<u64>() {
             config.max_file_size = mb_size * 1024 * 1024;
