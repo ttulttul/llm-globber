@@ -29,7 +29,7 @@ rust-test:
 
 # Run the legacy bash tests
 bash-test: $(TARGET)
-	chmod +x tests/test_llm_globber.sh tests/test_basic.sh tests/test_recursive.sh tests/test_file_types.sh tests/test_name_pattern.sh tests/test_dotfiles.sh tests/test_verbose_quiet.sh tests/test_common.sh
+	chmod +x tests/test_llm_globber.sh tests/test_basic.sh tests/test_recursive.sh tests/test_file_types.sh tests/test_name_pattern.sh tests/test_dotfiles.sh tests/test_verbose_quiet.sh tests/test_common.sh tests/test_c_version.sh
 	cd tests && ./test_llm_globber.sh
 
 # Run both test suites
