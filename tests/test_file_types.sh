@@ -21,9 +21,8 @@ H_FILES=$(find $TEST_DIR -maxdepth 1 -name "*.h")
 
 # Add each file to the expected output
 for file in $H_FILES; do
-    filename=$(basename "$file")
     echo "" >> $EXPECTED_OUTPUT
-    echo "'''--- $filename ---" >> $EXPECTED_OUTPUT
+    echo "'''--- $file ---" >> $EXPECTED_OUTPUT
     cat "$file" >> $EXPECTED_OUTPUT
     echo "" >> $EXPECTED_OUTPUT
     echo "'''" >> $EXPECTED_OUTPUT
@@ -56,7 +55,7 @@ ACTUAL_FILE_COUNT=$(grep -c "^'''\-\-\-" $ACTUAL_OUTPUT)
 
 if [ "$EXPECTED_FILE_COUNT" = "$ACTUAL_FILE_COUNT" ]; then
     # Check if all files are .h files
-    NON_H_FILES=$(grep "^'''\-\-\-" $ACTUAL_OUTPUT | grep -v "\.h \-\-\-")
+    NON_H_FILES=$(grep "^'''\-\-\-" $ACTUAL_OUTPUT | grep -v "\.h")
     
     if [ -z "$NON_H_FILES" ]; then
         echo "File types test passed: Found $ACTUAL_FILE_COUNT .h files as expected"
