@@ -1,10 +1,15 @@
-# Makefile for Rust project
+# Makefile for Rust and C versions
 
 # Project name (should match your Cargo.toml package name)
 PROJECT_NAME = llm_globber
 
 # Executable name (will be placed in ./target/release or ./target/debug)
 TARGET = ./target/release/$(PROJECT_NAME)
+
+# C version
+C_TARGET = ./$(PROJECT_NAME)_c
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -pthread
 
 # Source files (Cargo.toml manages this, but we can list src/main.rs for clarity)
 SRCS = src/main.rs
@@ -15,13 +20,17 @@ CARGO = cargo
 # Build profile (release for optimized build, debug for development)
 BUILD_PROFILE = release
 
-all: $(TARGET)
+all: $(TARGET) $(C_TARGET)
 
 $(TARGET): src/main.rs
 	$(CARGO) build --$(BUILD_PROFILE)
 
+$(C_TARGET): llm_globber.c
+	$(CC) $(CFLAGS) -o $(C_TARGET) llm_globber.c
+
 clean:
 	$(CARGO) clean
+	rm -f $(C_TARGET)
 
 # Run Rust's built-in tests
 rust-test:
@@ -40,4 +49,4 @@ c-test: $(C_TARGET)
 	chmod +x tests/test_c_version.sh tests/test_common.sh
 	cd tests && ./test_c_version.sh
 
-.PHONY: all clean test rust-test bash-test c-version c-test
+.PHONY: all clean test rust-test bash-test c-test
