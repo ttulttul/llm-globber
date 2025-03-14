@@ -708,8 +708,24 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
         if line.starts_with("'''--- ") && line.ends_with(" ---") {
             // If we were processing a file, write it out
             if let Some(file_path) = current_file.take() {
-                write_extracted_file(&file_path, &current_content)
-                    .map_err(|e| format!("Failed to write file {}: {}", file_path, e))?;
+                // Create the full output path by joining config.output_path with file_path
+                let output_file_path = if config.output_path.is_empty() || config.output_path == "." {
+                    file_path
+                } else {
+                    // Handle absolute paths in file_path
+                    let path_obj = Path::new(&file_path);
+                    if path_obj.is_absolute() {
+                        // For absolute paths, strip the leading / and join with output_path
+                        let rel_path = path_obj.strip_prefix("/").unwrap_or(path_obj);
+                        Path::new(&config.output_path).join(rel_path).to_string_lossy().to_string()
+                    } else {
+                        Path::new(&config.output_path).join(&file_path).to_string_lossy().to_string()
+                    }
+                };
+                
+                debug!("Extracting file: {} to {}", file_path, output_file_path);
+                write_extracted_file(&output_file_path, &current_content)
+                    .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
                 files_extracted += 1;
                 current_content.clear();
             }
@@ -742,8 +758,24 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     
     // Handle the last file if any
     if let Some(file_path) = current_file {
-        write_extracted_file(&file_path, &current_content)
-            .map_err(|e| format!("Failed to write file {}: {}", file_path, e))?;
+        // Create the full output path by joining config.output_path with file_path
+        let output_file_path = if config.output_path.is_empty() || config.output_path == "." {
+            file_path
+        } else {
+            // Handle absolute paths in file_path
+            let path_obj = Path::new(&file_path);
+            if path_obj.is_absolute() {
+                // For absolute paths, strip the leading / and join with output_path
+                let rel_path = path_obj.strip_prefix("/").unwrap_or(path_obj);
+                Path::new(&config.output_path).join(rel_path).to_string_lossy().to_string()
+            } else {
+                Path::new(&config.output_path).join(&file_path).to_string_lossy().to_string()
+            }
+        };
+        
+        debug!("Extracting file: {} to {}", file_path, output_file_path);
+        write_extracted_file(&output_file_path, &current_content)
+            .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
         files_extracted += 1;
     }
     
@@ -762,8 +794,12 @@ fn write_extracted_file(file_path: &str, content: &[String]) -> io::Result<()> {
     }
     
     let mut file = File::create(file_path)?;
-    for line in content {
-        writeln!(file, "{}", line)?;
+    
+    // Join all lines with a single newline and write at once
+    // This preserves the exact format of the original file
+    if !content.is_empty() {
+        let joined_content = content.join("\n");
+        file.write_all(joined_content.as_bytes())?;
     }
     
     Ok(())

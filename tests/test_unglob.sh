@@ -58,6 +58,10 @@ echo "Running unglob to extract files..."
 echo "Command: ../target/release/llm_globber -u $GLOBBED_FILE -o test_files -v"
 ../target/release/llm_globber -u "$GLOBBED_FILE" -o test_files -v
 
+# Debug: Show the content of the globbed file
+echo "Debug: Content of globbed file:"
+head -n 20 "$GLOBBED_FILE"
+
 # Step 5: Verify extracted files
 echo "Verifying extracted files..."
 EXTRACTED_CHECKSUMS=$(find test_files -type f -name "unglob_test*.txt" -o -path "*/subdir/*" | sort | xargs md5sum)
