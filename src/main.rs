@@ -281,7 +281,7 @@ fn print_usage(program_name: &str) {
     println!("Usage: {} [options] [files/directories...]", program_name);
     println!("Options:");
     println!("  -o PATH        Output directory path");
-    println!("  -n NAME        Output filename (without extension)");
+    println!("  -n NAME        Output filename (without extension) - not required with --git");
     println!("  -t TYPES       File types to include (comma separated, e.g. '.c,.h,.txt')");
     println!("  -a             Include all files (no filtering by type)");
     println!("  -r             Recursively process directories");
@@ -695,7 +695,7 @@ fn main() -> Result<(), String> {
                 .short('n')
                 .long("name")
                 .value_name("NAME")
-                .help("Output filename (without extension)")
+                .help("Output filename (without extension) - not required with --git")
                 .takes_value(true),
         )
         .arg(
@@ -799,7 +799,7 @@ fn main() -> Result<(), String> {
                 .value_name("FILES/DIRECTORIES")
                 .help("Files or directories to process")
                 .multiple(true)
-                .required_unless("git_repo")
+                .required_unless_one(&["git_repo", "help"])
                 .min_values(1),
         )
         .get_matches();
@@ -844,7 +844,7 @@ fn main() -> Result<(), String> {
             .ok_or("Error: Output path (-o) is required")?;
         let output_filename = matches
             .value_of("output_name")
-            .ok_or("Error: Output filename (-n) is required")?;
+            .ok_or("Error: Output filename (-n) is required when not using --git")?;
             
         config.output_path = sanitize_path(output_path)
             .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
