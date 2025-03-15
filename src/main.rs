@@ -728,91 +728,27 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     while let Some(line_result) = lines.next() {
         let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
         
-        // Check for file header with signature
-        // For instance:
-        // '''--- test_files/sig_test1.txt --- [SIGNATURE:iioe+VS90KuRFo/4FeoT0kQ64cY13T3dBUE1gqA2jatttBitY5KwTFb9JG5O4RpySpsfI0TvdWE4WWYpxkReCg==]
-        if line.starts_with("'''--- ") && line.contains(" --- [SIGNATURE:") && line.ends_with("]") {
-            // If we were processing a file, write it out
+        // Check for file header (with or without signature)
+        if line.starts_with("'''--- ") {
+            // If we were processing a file, write it out before starting a new one
             if let Some(file_path) = current_file.take() {
-                // Create a copy of file_path for logging
-                let file_path_for_log = file_path.clone();
-                
-                // For the output path, we need to strip any "test_files/" prefix
-                // from the original path to avoid nesting
-                let stripped_path = if file_path.starts_with("test_files/") {
-                    file_path.trim_start_matches("test_files/").to_string()
-                } else {
-                    file_path
-                };
-                
-                let output_file_path = output_base.join(stripped_path).to_string_lossy().to_string();
-                
-                // Verify signature if needed
-                if config.use_signature && current_signature.is_some() && config.public_key.is_some() {
-                    let content_bytes = current_content.join("\n").as_bytes().to_vec();
-                    if let Err(e) = verify_signature(
-                        config.public_key.as_ref().unwrap(),
-                        &content_bytes,
-                        current_signature.as_ref().unwrap()
-                    ) {
-                        return Err(format!("Signature verification failed for {}: {}", file_path_for_log, e));
-                    }
-                    debug!("Signature verified for: {}", file_path_for_log);
-                }
-                
-                debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
-                write_extracted_file(&output_file_path, &current_content)
-                    .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
-                files_extracted += 1;
-                current_content.clear();
-            }
-            
-            // Extract new file path and signature
-            let sig_start = line.find(" --- [SIGNATURE:").unwrap() + 15;
-            let sig_end = line.len() - 1;
-            let file_path_end = sig_start - 15;
-            
-            let file_path = line[7..file_path_end].trim().to_string();
-            let signature = line[sig_start..sig_end].to_string();
-            
-            current_file = Some(file_path);
-            current_signature = Some(signature);
-            in_file_content = true;
-            continue;
-        }
-        // Check for file header without signature
-        else if line.starts_with("'''--- ") && line.ends_with(" ---") {
-            // If we were processing a file, write it out
-            if let Some(file_path) = current_file.take() {
-                // Create a copy of file_path for logging
-                let file_path_for_log = file_path.clone();
-                
-                // For the output path, we need to strip any "test_files/" prefix
-                // from the original path to avoid nesting
-                let stripped_path = if file_path.starts_with("test_files/") {
-                    file_path.trim_start_matches("test_files/").to_string()
-                } else {
-                    file_path
-                };
-                
-                let output_file_path = output_base.join(stripped_path).to_string_lossy().to_string();
-                
-                // Verify signature if needed
-                if config.use_signature && config.public_key.is_some() && current_signature.is_none() {
-                    warn!("File {} has no signature but signature verification is enabled", file_path_for_log);
-                }
-                
-                debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
-                write_extracted_file(&output_file_path, &current_content)
-                    .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
+                process_extracted_file(
+                    config, 
+                    &file_path, 
+                    &current_content, 
+                    current_signature.as_deref(), 
+                    output_base
+                )?;
                 files_extracted += 1;
                 current_content.clear();
                 current_signature = None;
             }
             
-            // Extract new file path
-            let file_path = line[7..line.len()-4].trim().to_string();
+            // Parse the header line to extract file path and optional signature
+            let (file_path, signature) = parse_file_header(&line)?;
+            
             current_file = Some(file_path);
+            current_signature = signature;
             in_file_content = true;
             continue;
         }
@@ -838,37 +774,13 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     
     // Handle the last file if any
     if let Some(file_path) = current_file {
-        // Create a copy of file_path for logging
-        let file_path_for_log = file_path.clone();
-        
-        // For the output path, we need to strip any "test_files/" prefix
-        // from the original path to avoid nesting
-        let stripped_path = if file_path.starts_with("test_files/") {
-            file_path.trim_start_matches("test_files/").to_string()
-        } else {
-            file_path
-        };
-        
-        let output_file_path = output_base.join(stripped_path).to_string_lossy().to_string();
-        
-        // Verify signature if needed
-        if config.use_signature && current_signature.is_some() && config.public_key.is_some() {
-            let content_bytes = current_content.join("\n").as_bytes().to_vec();
-            if let Err(e) = verify_signature(
-                config.public_key.as_ref().unwrap(),
-                &content_bytes,
-                current_signature.as_ref().unwrap()
-            ) {
-                return Err(format!("Signature verification failed for {}: {}", file_path_for_log, e));
-            }
-            debug!("Signature verified for: {}", file_path_for_log);
-        } else if config.use_signature && config.public_key.is_some() && current_signature.is_none() {
-            warn!("File {} has no signature but signature verification is enabled", file_path_for_log);
-        }
-        
-        debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
-        write_extracted_file(&output_file_path, &current_content)
-            .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
+        process_extracted_file(
+            config, 
+            &file_path, 
+            &current_content, 
+            current_signature.as_deref(), 
+            output_base
+        )?;
         files_extracted += 1;
     }
     
@@ -878,6 +790,74 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     
     info!("Successfully extracted {} files", files_extracted);
     Ok(())
+}
+
+// Helper function to parse a file header line
+fn parse_file_header(line: &str) -> Result<(String, Option<String>), String> {
+    // Check for file header with signature
+    // Format: '''--- path/to/file.txt --- [SIGNATURE:base64data]
+    if line.contains(" --- [SIGNATURE:") && line.ends_with("]") {
+        let sig_start = line.find(" --- [SIGNATURE:").unwrap() + 15;
+        let sig_end = line.len() - 1;
+        let file_path_end = sig_start - 15;
+        
+        let file_path = line[7..file_path_end].trim().to_string();
+        let signature = line[sig_start..sig_end].to_string();
+        
+        Ok((file_path, Some(signature)))
+    } 
+    // Check for file header without signature
+    // Format: '''--- path/to/file.txt ---
+    else if line.ends_with(" ---") {
+        let file_path = line[7..line.len()-4].trim().to_string();
+        Ok((file_path, None))
+    }
+    else {
+        Err(format!("Invalid file header format: {}", line))
+    }
+}
+
+// Helper function to process and write an extracted file
+fn process_extracted_file(
+    config: &ScrapeConfig,
+    file_path: &str,
+    content: &[String],
+    signature: Option<&str>,
+    output_base: &Path
+) -> Result<(), String> {
+    // For the output path, we need to strip any "test_files/" prefix
+    // from the original path to avoid nesting
+    let stripped_path = if file_path.starts_with("test_files/") {
+        file_path.trim_start_matches("test_files/").to_string()
+    } else {
+        file_path.to_string()
+    };
+    
+    let output_file_path = output_base.join(&stripped_path).to_string_lossy().to_string();
+    
+    // Verify signature if needed
+    if config.use_signature && config.public_key.is_some() {
+        match signature {
+            Some(sig) => {
+                let content_bytes = content.join("\n").as_bytes().to_vec();
+                if let Err(e) = verify_signature(
+                    config.public_key.as_ref().unwrap(),
+                    &content_bytes,
+                    sig
+                ) {
+                    return Err(format!("Signature verification failed for {}: {}", file_path, e));
+                }
+                debug!("Signature verified for: {}", file_path);
+            },
+            None => {
+                warn!("File {} has no signature but signature verification is enabled", file_path);
+            }
+        }
+    }
+    
+    debug!("Extracting file: {} to {}", file_path, output_file_path);
+    write_extracted_file(&output_file_path, content)
+        .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))
 }
 
 fn write_extracted_file(file_path: &str, content: &[String]) -> io::Result<()> {
