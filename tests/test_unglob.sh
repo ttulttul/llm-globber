@@ -3,6 +3,21 @@
 # Test the unglob functionality of LLM Globber
 # This test checks if the tool correctly extracts files from a previously generated output
 
+# Define cleanup function
+cleanup() {
+    local exit_code=$?
+    echo "Cleaning up test files..."
+    rm -rf test_files_backup
+    if [ $exit_code -ne 0 ]; then
+        echo "Test failed with exit code $exit_code. Cleaning up output files..."
+        rm -f test_output/unglob_test_*.txt
+    fi
+    exit $exit_code
+}
+
+# Set trap to call cleanup function on exit
+trap cleanup EXIT
+
 set -e  # Exit on any error
 
 # Create output directory and ensure test files directory exists
@@ -74,12 +89,13 @@ echo "$EXTRACTED_CHECKSUMS"
 # Compare checksums
 if [ "$ORIGINAL_CHECKSUMS" = "$EXTRACTED_CHECKSUMS" ]; then
     echo "SUCCESS: All files were correctly extracted with matching content"
-    exit 0
+    # Exit code 0 will trigger cleanup with success
 else
     echo "FAILURE: Extracted files do not match original files"
     echo "Original checksums:"
     echo "$ORIGINAL_CHECKSUMS"
     echo "Extracted checksums:"
     echo "$EXTRACTED_CHECKSUMS"
+    # Exit with error - will trigger cleanup
     exit 1
 fi
