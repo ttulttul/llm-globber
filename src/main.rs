@@ -729,6 +729,8 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
         let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
         
         // Check for file header with signature
+        // For instance:
+        // '''--- test_files/sig_test1.txt --- [SIGNATURE:iioe+VS90KuRFo/4FeoT0kQ64cY13T3dBUE1gqA2jatttBitY5KwTFb9JG5O4RpySpsfI0TvdWE4WWYpxkReCg==]
         if line.starts_with("'''--- ") && line.contains(" --- [SIGNATURE:") && line.ends_with("]") {
             // If we were processing a file, write it out
             if let Some(file_path) = current_file.take() {
