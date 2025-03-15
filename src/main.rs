@@ -797,9 +797,9 @@ fn parse_file_header(line: &str) -> Result<(String, Option<String>), String> {
     // Check for file header with signature
     // Format: '''--- path/to/file.txt --- [SIGNATURE:base64data]
     if line.contains(" --- [SIGNATURE:") && line.ends_with("]") {
-        let sig_start = line.find(" --- [SIGNATURE:").unwrap() + 15;
+        let sig_start = line.find(" --- [SIGNATURE:").unwrap() + 16;
         let sig_end = line.len() - 1;
-        let file_path_end = sig_start - 15;
+        let file_path_end = sig_start - 16;
         
         let file_path = line[7..file_path_end].trim().to_string();
         let signature = line[sig_start..sig_end].to_string();
