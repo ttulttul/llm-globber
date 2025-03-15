@@ -13,7 +13,7 @@ use log::{debug, error, info, warn, LevelFilter, Log, Metadata, Record, SetLogge
 use memmap2::MmapOptions;
 use ed25519_dalek::{Keypair, Signer, Verifier, PublicKey, Signature};
 use rand::rngs::OsRng;
-use base64::{encode, decode};
+use base64::{engine::general_purpose, Engine};
 
 #[cfg(test)]
 mod tests;
@@ -763,7 +763,6 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
                     .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
                 files_extracted += 1;
                 current_content.clear();
-                current_signature = None;
             }
             
             // Extract new file path and signature
@@ -1150,7 +1149,7 @@ fn main() -> Result<(), String> {
             let public_key = keypair.public;
             
             info!("Generated ed25519 keypair for signing");
-            info!("Public key: {}", encode(public_key.to_bytes()));
+            info!("Public key: {}", general_purpose::STANDARD.encode(public_key.to_bytes()));
             
             config.keypair = Some(keypair);
             config.public_key = Some(public_key);
@@ -1162,7 +1161,7 @@ fn main() -> Result<(), String> {
             config.public_key = Some(keypair.public);
             
             info!("Using ed25519 public key for signature verification");
-            info!("Public key: {}", encode(config.public_key.as_ref().unwrap().to_bytes()));
+            info!("Public key: {}", general_purpose::STANDARD.encode(config.public_key.as_ref().unwrap().to_bytes()));
         }
     }
 
@@ -1262,12 +1261,12 @@ fn generate_keypair() -> Keypair {
 // Sign data with the keypair
 fn sign_data(keypair: &Keypair, data: &[u8]) -> String {
     let signature = keypair.sign(data);
-    encode(signature.to_bytes())
+    general_purpose::STANDARD.encode(signature.to_bytes())
 }
 
 // Verify a signature
 fn verify_signature(public_key: &PublicKey, data: &[u8], signature_str: &str) -> Result<(), String> {
-    let signature_bytes = decode(signature_str)
+    let signature_bytes = general_purpose::STANDARD.decode(signature_str)
         .map_err(|e| format!("Invalid signature encoding: {}", e))?;
     
     if signature_bytes.len() != ed25519_dalek::SIGNATURE_LENGTH {
