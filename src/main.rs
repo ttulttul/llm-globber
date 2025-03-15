@@ -100,7 +100,7 @@ struct FileEntry {
 
 type ExtHashEntry = String; // In Rust, String directly is used, HashMap manages ownership
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ScrapeConfig {
     // Keeping repo_paths for API compatibility but marking with #[allow(dead_code)]
     #[allow(dead_code)]
@@ -189,6 +189,20 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
     set_secure_file_permissions(&output_file_path)?;
 
     config.output_file = Some(BufWriter::with_capacity(IO_BUFFER_SIZE, output_file));
+    
+    // Write public key at the start of the file if signature is enabled
+    if config.use_signature {
+        if let Some(public_key) = &config.public_key {
+            let encoded_pubkey = general_purpose::STANDARD.encode(public_key.to_bytes());
+            if let Some(output_file) = &mut config.output_file {
+                writeln!(output_file, "'''--- PUBLIC_KEY --- [KEY:{}]", encoded_pubkey)
+                    .map_err(|e| format!("Error writing public key to output file: {}", e))?;
+                writeln!(output_file, "'''\n")
+                    .map_err(|e| format!("Error writing public key to output file: {}", e))?;
+            }
+            info!("Added public key to output file");
+        }
+    }
 
     let mut files_processed = 0;
     // Create a copy of the paths to avoid borrowing issues
@@ -757,6 +771,7 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     let mut current_signature: Option<String> = None;
     let mut files_extracted = 0;
     let mut in_file_content = false;
+    let mut extracted_public_key: Option<PublicKey> = None;
     
     // Get the base output directory
     let output_base = Path::new(&config.output_path);
@@ -764,12 +779,58 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     while let Some(line_result) = lines.next() {
         let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
         
+        // Check for public key at the start of the file
+        if line.starts_with("'''--- PUBLIC_KEY --- [KEY:") && line.ends_with("]") {
+            let key_start = line.find("[KEY:").unwrap() + 5;
+            let key_end = line.len() - 1;
+            let encoded_key = &line[key_start..key_end];
+            
+            // Decode and parse the public key
+            match general_purpose::STANDARD.decode(encoded_key) {
+                Ok(key_bytes) => {
+                    if key_bytes.len() == ed25519_dalek::PUBLIC_KEY_LENGTH {
+                        match PublicKey::from_bytes(&key_bytes) {
+                            Ok(public_key) => {
+                                extracted_public_key = Some(public_key);
+                                info!("Found public key in file: {}", encoded_key);
+                                
+                                // Skip the closing marker line
+                                if let Some(Ok(next_line)) = lines.next() {
+                                    if next_line != "'''" {
+                                        return Err("Invalid public key format: missing closing marker".to_string());
+                                    }
+                                }
+                            },
+                            Err(e) => {
+                                warn!("Invalid public key format: {}", e);
+                            }
+                        }
+                    } else {
+                        warn!("Invalid public key length: {}", key_bytes.len());
+                    }
+                },
+                Err(e) => {
+                    warn!("Failed to decode public key: {}", e);
+                }
+            }
+            continue;
+        }
+        
         // Check for file header (with or without signature)
         if line.starts_with("'''--- ") {
             // If we were processing a file, write it out before starting a new one
             if let Some(file_path) = current_file.take() {
+                let config_with_key = if config.use_signature && extracted_public_key.is_some() {
+                    // Create a temporary config with the extracted public key
+                    let mut temp_config = config.clone();
+                    temp_config.public_key = extracted_public_key;
+                    &temp_config
+                } else {
+                    config
+                };
+                
                 process_extracted_file(
-                    config, 
+                    config_with_key, 
                     &file_path, 
                     &current_content, 
                     current_signature.as_deref(), 
@@ -810,8 +871,17 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     
     // Handle the last file if any
     if let Some(file_path) = current_file {
+        let config_with_key = if config.use_signature && extracted_public_key.is_some() {
+            // Create a temporary config with the extracted public key
+            let mut temp_config = config.clone();
+            temp_config.public_key = extracted_public_key;
+            &temp_config
+        } else {
+            config
+        };
+        
         process_extracted_file(
-            config, 
+            config_with_key, 
             &file_path, 
             &current_content, 
             current_signature.as_deref(), 
@@ -842,6 +912,11 @@ fn parse_file_header(line: &str) -> Result<(String, Option<String>), String> {
         
         Ok((file_path, Some(signature)))
     } 
+    // Check for public key header (should be handled separately)
+    // Format: '''--- PUBLIC_KEY --- [KEY:base64data]
+    else if line.starts_with("'''--- PUBLIC_KEY ---") {
+        Err("Public key header should be handled separately".to_string())
+    }
     // Check for file header without signature
     // Format: '''--- path/to/file.txt ---
     else if line.ends_with(" ---") {
@@ -1199,26 +1274,21 @@ fn main() -> Result<(), String> {
     
     if matches.is_present("signature") {
         config.use_signature = true;
-        
+            
         if !config.unglob_mode {
             // Generate a new keypair for signing
             let keypair = generate_keypair();
             let public_key = keypair.public;
-            
+                
             info!("Generated ed25519 keypair for signing");
             info!("Public key: {}", general_purpose::STANDARD.encode(public_key.to_bytes()));
-            
+                
             config.keypair = Some(keypair);
             config.public_key = Some(public_key);
         } else {
-            // For unglobbing, we need to load the public key
-            // In a real implementation, you'd load this from a file or environment variable
-            // For this example, we'll generate a keypair and use its public key
-            let keypair = generate_keypair();
-            config.public_key = Some(keypair.public);
-            
-            info!("Using ed25519 public key for signature verification");
-            info!("Public key: {}", general_purpose::STANDARD.encode(config.public_key.as_ref().unwrap().to_bytes()));
+            // For unglobbing, we'll extract the public key from the file
+            // We don't need to generate a keypair here anymore
+            info!("Will extract public key from input file for signature verification");
         }
     }
 
