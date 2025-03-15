@@ -845,7 +845,11 @@ fn process_extracted_file(
                     &content_bytes,
                     sig
                 ) {
-                    return Err(format!("Signature verification failed for {}: {}", file_path, e));
+                    if config.verbose {
+                        return Err(format!("Signature verification failed for {}: {}. Signature: {}", file_path, e, sig));
+                    } else {
+                        return Err(format!("Signature verification failed for {}: {}", file_path, e));
+                    }
                 }
                 debug!("Signature verified for: {}", file_path);
             },
