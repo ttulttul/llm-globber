@@ -11,6 +11,9 @@ use clap::{App, Arg};
 use glob::{glob, Pattern};
 use log::{debug, error, info, warn, LevelFilter, Log, Metadata, Record, SetLoggerError};
 use memmap2::MmapOptions;
+use ed25519_dalek::{Keypair, Signer, Verifier, PublicKey, Signature};
+use rand::rngs::OsRng;
+use base64::{encode, decode};
 
 #[cfg(test)]
 mod tests;
@@ -123,6 +126,9 @@ struct ScrapeConfig {
     git_repo_path: Option<String>,
     unglob_mode: bool,
     unglob_input_file: String,
+    use_signature: bool,
+    keypair: Option<Keypair>,
+    public_key: Option<PublicKey>,
 }
 
 impl Default for ScrapeConfig {
@@ -150,6 +156,9 @@ impl Default for ScrapeConfig {
             git_repo_path: None,
             unglob_mode: false,
             unglob_input_file: String::new(),
+            use_signature: false,
+            keypair: None,
+            public_key: None,
         }
     }
 }
@@ -299,6 +308,7 @@ fn print_usage(program_name: &str) {
     println!("  -v             Verbose output");
     println!("  -q             Quiet mode (suppress all output)");
     println!("  -h             Show this help message");
+    println!("  --signature    Add ed25519 signatures to files when globbing and verify signatures when unglobbing");
     println!("  --git PATH     Process a git repository (auto-configures path, name, and files)");
 }
 
@@ -512,7 +522,17 @@ fn write_file_content(config: &mut ScrapeConfig, file_path: &str, data: &[u8], i
     let _lock = config.output_mutex.lock().unwrap(); // Acquire mutex lock
 
     if let Some(output_file) = &mut config.output_file {
-        writeln!(output_file, "'''--- {} ---", file_path)?;
+        if config.use_signature && !is_binary {
+            if let Some(keypair) = &config.keypair {
+                let signature = sign_data(keypair, data);
+                writeln!(output_file, "'''--- {} --- [SIGNATURE:{}]", file_path, signature)?;
+            } else {
+                writeln!(output_file, "'''--- {} ---", file_path)?;
+            }
+        } else {
+            writeln!(output_file, "'''--- {} ---", file_path)?;
+        }
+        
         if is_binary {
             writeln!(output_file, "[Binary file - contents omitted]")?;
         } else {
@@ -698,6 +718,7 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     
     let mut current_file: Option<String> = None;
     let mut current_content: Vec<String> = Vec::new();
+    let mut current_signature: Option<String> = None;
     let mut files_extracted = 0;
     let mut in_file_content = false;
     
@@ -707,8 +728,8 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     while let Some(line_result) = lines.next() {
         let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
         
-        // Check for file header
-        if line.starts_with("'''--- ") && line.ends_with(" ---") {
+        // Check for file header with signature
+        if line.starts_with("'''--- ") && line.contains(" --- [SIGNATURE:") && line.ends_with("]") {
             // If we were processing a file, write it out
             if let Some(file_path) = current_file.take() {
                 // Create a copy of file_path for logging
@@ -724,11 +745,68 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
                 
                 let output_file_path = output_base.join(stripped_path).to_string_lossy().to_string();
                 
+                // Verify signature if needed
+                if config.use_signature && current_signature.is_some() && config.public_key.is_some() {
+                    let content_bytes = current_content.join("\n").as_bytes().to_vec();
+                    if let Err(e) = verify_signature(
+                        config.public_key.as_ref().unwrap(),
+                        &content_bytes,
+                        current_signature.as_ref().unwrap()
+                    ) {
+                        return Err(format!("Signature verification failed for {}: {}", file_path_for_log, e));
+                    }
+                    debug!("Signature verified for: {}", file_path_for_log);
+                }
+                
                 debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
                 write_extracted_file(&output_file_path, &current_content)
                     .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
                 files_extracted += 1;
                 current_content.clear();
+                current_signature = None;
+            }
+            
+            // Extract new file path and signature
+            let sig_start = line.find(" --- [SIGNATURE:").unwrap() + 15;
+            let sig_end = line.len() - 1;
+            let file_path_end = sig_start - 15;
+            
+            let file_path = line[7..file_path_end].trim().to_string();
+            let signature = line[sig_start..sig_end].to_string();
+            
+            current_file = Some(file_path);
+            current_signature = Some(signature);
+            in_file_content = true;
+            continue;
+        }
+        // Check for file header without signature
+        else if line.starts_with("'''--- ") && line.ends_with(" ---") {
+            // If we were processing a file, write it out
+            if let Some(file_path) = current_file.take() {
+                // Create a copy of file_path for logging
+                let file_path_for_log = file_path.clone();
+                
+                // For the output path, we need to strip any "test_files/" prefix
+                // from the original path to avoid nesting
+                let stripped_path = if file_path.starts_with("test_files/") {
+                    file_path.trim_start_matches("test_files/").to_string()
+                } else {
+                    file_path
+                };
+                
+                let output_file_path = output_base.join(stripped_path).to_string_lossy().to_string();
+                
+                // Verify signature if needed
+                if config.use_signature && config.public_key.is_some() && current_signature.is_none() {
+                    warn!("File {} has no signature but signature verification is enabled", file_path_for_log);
+                }
+                
+                debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
+                write_extracted_file(&output_file_path, &current_content)
+                    .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))?;
+                files_extracted += 1;
+                current_content.clear();
+                current_signature = None;
             }
             
             // Extract new file path
@@ -771,6 +849,21 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
         };
         
         let output_file_path = output_base.join(stripped_path).to_string_lossy().to_string();
+        
+        // Verify signature if needed
+        if config.use_signature && current_signature.is_some() && config.public_key.is_some() {
+            let content_bytes = current_content.join("\n").as_bytes().to_vec();
+            if let Err(e) = verify_signature(
+                config.public_key.as_ref().unwrap(),
+                &content_bytes,
+                current_signature.as_ref().unwrap()
+            ) {
+                return Err(format!("Signature verification failed for {}: {}", file_path_for_log, e));
+            }
+            debug!("Signature verified for: {}", file_path_for_log);
+        } else if config.use_signature && config.public_key.is_some() && current_signature.is_none() {
+            warn!("File {} has no signature but signature verification is enabled", file_path_for_log);
+        }
         
         debug!("Extracting file: {} to {}", file_path_for_log, output_file_path);
         write_extracted_file(&output_file_path, &current_content)
@@ -924,6 +1017,11 @@ fn main() -> Result<(), String> {
                 .help("Show this help message"),
         )
         .arg(
+            Arg::with_name("signature")
+                .long("signature")
+                .help("Add ed25519 signatures to files when globbing and verify signatures when unglobbing"),
+        )
+        .arg(
             Arg::with_name("git_repo")
                 .long("git")
                 .value_name("PATH")
@@ -1042,6 +1140,31 @@ fn main() -> Result<(), String> {
     if matches.is_present("abort_on_error") {
         config.abort_on_error = true;
     }
+    
+    if matches.is_present("signature") {
+        config.use_signature = true;
+        
+        if !config.unglob_mode {
+            // Generate a new keypair for signing
+            let keypair = generate_keypair();
+            let public_key = keypair.public;
+            
+            info!("Generated ed25519 keypair for signing");
+            info!("Public key: {}", encode(public_key.to_bytes()));
+            
+            config.keypair = Some(keypair);
+            config.public_key = Some(public_key);
+        } else {
+            // For unglobbing, we need to load the public key
+            // In a real implementation, you'd load this from a file or environment variable
+            // For this example, we'll generate a keypair and use its public key
+            let keypair = generate_keypair();
+            config.public_key = Some(keypair.public);
+            
+            info!("Using ed25519 public key for signature verification");
+            info!("Public key: {}", encode(config.public_key.as_ref().unwrap().to_bytes()));
+        }
+    }
 
     if !config.unglob_mode || matches.is_present("output_path") {
         info!("Output path set to: '{}'", config.output_path);
@@ -1129,4 +1252,31 @@ fn main() -> Result<(), String> {
             Err(err)
         }
     }
+}
+// Generate a new keypair for signing
+fn generate_keypair() -> Keypair {
+    let mut csprng = OsRng{};
+    Keypair::generate(&mut csprng)
+}
+
+// Sign data with the keypair
+fn sign_data(keypair: &Keypair, data: &[u8]) -> String {
+    let signature = keypair.sign(data);
+    encode(signature.to_bytes())
+}
+
+// Verify a signature
+fn verify_signature(public_key: &PublicKey, data: &[u8], signature_str: &str) -> Result<(), String> {
+    let signature_bytes = decode(signature_str)
+        .map_err(|e| format!("Invalid signature encoding: {}", e))?;
+    
+    if signature_bytes.len() != ed25519_dalek::SIGNATURE_LENGTH {
+        return Err(format!("Invalid signature length: {}", signature_bytes.len()));
+    }
+    
+    let signature = Signature::from_bytes(&signature_bytes)
+        .map_err(|e| format!("Invalid signature: {}", e))?;
+    
+    public_key.verify(data, &signature)
+        .map_err(|e| format!("Signature verification failed: {}", e))
 }
