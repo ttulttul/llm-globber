@@ -1,6 +1,6 @@
 [package]
 name = "llm_globber" 
-version = "0.2.0" 
+version = "0.3.0" 
 authors = ["Ken Simpson <ksimpson@mailchannels.com>"]
 edition = "2021"
 
@@ -11,6 +11,9 @@ log = "0.4" # Or a more recent version
 memmap2 = "0.5" # Or a more recent version
 simplelog = "0.12" # Using a more recent version that's available
 chrono = "0.4" # Or a more recent version
+ed25519-dalek = "1.0" # For cryptographic signatures
+base64 = "0.21" # For encoding/decoding signatures
+rand = "0.8" # For generating keypairs
 
 [dev-dependencies]
 tempfile = "3.3"
