@@ -528,12 +528,39 @@ fn write_file_content(config: &mut ScrapeConfig, file_path: &str, data: &[u8], i
                 let content_str = str::from_utf8(data).unwrap_or("Non-UTF8 content");
                 
                 // Log what we're signing
-                if config.verbose {
-                    debug!("Signing content for file: {}", file_path);
-                    debug!("Content length for signing: {} bytes", content_str.len());
+                debug!("Signing content for file: {}", file_path);
+                debug!("Content length for signing: {} bytes", content_str.len());
+                
+                // Calculate and log hash of content for debugging
+                let content_bytes = content_str.as_bytes();
+                let mut hash_value: u64 = 0;
+                for &byte in content_bytes.iter().take(1000) {
+                    hash_value = hash_value.wrapping_mul(31).wrapping_add(byte as u64);
+                }
+                debug!("Content hash (first 1000 bytes): {}", hash_value);
+                
+                // Log content samples at different positions
+                let samples = [
+                    (0, std::cmp::min(50, content_bytes.len())),
+                    (std::cmp::min(100, content_bytes.len().saturating_sub(50)), std::cmp::min(150, content_bytes.len())),
+                    (content_bytes.len().saturating_sub(50), content_bytes.len())
+                ];
+                
+                for (i, (start, end)) in samples.iter().enumerate() {
+                    if *start < *end {
+                        let sample = String::from_utf8_lossy(&content_bytes[*start..*end]);
+                        debug!("Content sample {} (bytes {}-{}): {:?}", i+1, start, end, sample);
+                    }
                 }
                 
-                let signature = sign_data(keypair, content_str.as_bytes());
+                // Log exact bytes being signed (for small files)
+                if content_bytes.len() < 500 {
+                    debug!("Full content being signed: {:?}", String::from_utf8_lossy(content_bytes));
+                    debug!("Raw bytes: {:?}", content_bytes);
+                }
+                
+                let signature = sign_data(keypair, content_bytes);
+                debug!("Generated signature for {}: {}", file_path, signature);
                 writeln!(output_file, "'''--- {} --- [SIGNATURE:{}]", file_path, signature)?;
             } else {
                 writeln!(output_file, "'''--- {} ---", file_path)?;
@@ -856,8 +883,33 @@ fn process_extracted_file(
                 // Log content length for debugging
                 debug!("Content length for verification: {} bytes", content_str.len());
                 
-                // Convert to bytes for verification
+                // Calculate and log hash of content for debugging
                 let content_bytes = content_str.as_bytes();
+                let mut hash_value: u64 = 0;
+                for &byte in content_bytes.iter().take(1000) {
+                    hash_value = hash_value.wrapping_mul(31).wrapping_add(byte as u64);
+                }
+                debug!("Content hash (first 1000 bytes): {}", hash_value);
+                
+                // Log content samples at different positions
+                let samples = [
+                    (0, std::cmp::min(50, content_bytes.len())),
+                    (std::cmp::min(100, content_bytes.len().saturating_sub(50)), std::cmp::min(150, content_bytes.len())),
+                    (content_bytes.len().saturating_sub(50), content_bytes.len())
+                ];
+                
+                for (i, (start, end)) in samples.iter().enumerate() {
+                    if *start < *end {
+                        let sample = String::from_utf8_lossy(&content_bytes[*start..*end]);
+                        debug!("Content sample {} (bytes {}-{}): {:?}", i+1, start, end, sample);
+                    }
+                }
+                
+                // Log exact bytes being verified (for small files)
+                if content_bytes.len() < 500 {
+                    debug!("Full content being verified: {:?}", String::from_utf8_lossy(content_bytes));
+                    debug!("Raw bytes: {:?}", content_bytes);
+                }
                 
                 if let Err(e) = verify_signature(
                     config.public_key.as_ref().unwrap(),
