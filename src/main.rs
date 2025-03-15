@@ -100,7 +100,8 @@ struct FileEntry {
 
 type ExtHashEntry = String; // In Rust, String directly is used, HashMap manages ownership
 
-#[derive(Debug, Clone)]
+// We can't derive Clone because BufWriter<File> and Keypair don't implement Clone
+#[derive(Debug)]
 struct ScrapeConfig {
     // Keeping repo_paths for API compatibility but marking with #[allow(dead_code)]
     #[allow(dead_code)]
@@ -129,6 +130,39 @@ struct ScrapeConfig {
     use_signature: bool,
     keypair: Option<Keypair>,
     public_key: Option<PublicKey>,
+}
+
+// Implement a custom clone method that doesn't clone the non-cloneable fields
+impl ScrapeConfig {
+    fn clone_for_verification(&self, new_public_key: Option<PublicKey>) -> Self {
+        ScrapeConfig {
+            repo_paths: self.repo_paths.clone(),
+            file_entries: self.file_entries.clone(),
+            output_path: self.output_path.clone(),
+            output_filename: self.output_filename.clone(),
+            file_type_hash: self.file_type_hash.clone(),
+            filter_files: self.filter_files,
+            recursive: self.recursive,
+            name_pattern: self.name_pattern.clone(),
+            verbose: self.verbose,
+            quiet: self.quiet,
+            no_dot_files: self.no_dot_files,
+            max_file_size: self.max_file_size,
+            output_file: None, // Don't clone the file handle
+            output_mutex: Arc::clone(&self.output_mutex),
+            abort_on_error: self.abort_on_error,
+            show_progress: self.show_progress,
+            processed_files: self.processed_files,
+            failed_files: self.failed_files,
+            start_time: self.start_time,
+            git_repo_path: self.git_repo_path.clone(),
+            unglob_mode: self.unglob_mode,
+            unglob_input_file: self.unglob_input_file.clone(),
+            use_signature: self.use_signature,
+            keypair: None, // Don't clone the keypair
+            public_key: new_public_key,
+        }
+    }
 }
 
 impl Default for ScrapeConfig {
@@ -820,22 +854,26 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
         if line.starts_with("'''--- ") {
             // If we were processing a file, write it out before starting a new one
             if let Some(file_path) = current_file.take() {
-                let config_with_key = if config.use_signature && extracted_public_key.is_some() {
+                if config.use_signature && extracted_public_key.is_some() {
                     // Create a temporary config with the extracted public key
-                    let mut temp_config = config.clone();
-                    temp_config.public_key = extracted_public_key;
-                    &temp_config
+                    let temp_config = config.clone_for_verification(extracted_public_key);
+                    
+                    process_extracted_file(
+                        &temp_config, 
+                        &file_path, 
+                        &current_content, 
+                        current_signature.as_deref(), 
+                        output_base
+                    )?;
                 } else {
-                    config
-                };
-                
-                process_extracted_file(
-                    config_with_key, 
-                    &file_path, 
-                    &current_content, 
-                    current_signature.as_deref(), 
-                    output_base
-                )?;
+                    process_extracted_file(
+                        config, 
+                        &file_path, 
+                        &current_content, 
+                        current_signature.as_deref(), 
+                        output_base
+                    )?;
+                }
                 files_extracted += 1;
                 current_content.clear();
                 // No need to reset current_signature as it will be overwritten in the next iteration
@@ -871,22 +909,26 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     
     // Handle the last file if any
     if let Some(file_path) = current_file {
-        let config_with_key = if config.use_signature && extracted_public_key.is_some() {
+        if config.use_signature && extracted_public_key.is_some() {
             // Create a temporary config with the extracted public key
-            let mut temp_config = config.clone();
-            temp_config.public_key = extracted_public_key;
-            &temp_config
+            let temp_config = config.clone_for_verification(extracted_public_key);
+            
+            process_extracted_file(
+                &temp_config, 
+                &file_path, 
+                &current_content, 
+                current_signature.as_deref(), 
+                output_base
+            )?;
         } else {
-            config
-        };
-        
-        process_extracted_file(
-            config_with_key, 
-            &file_path, 
-            &current_content, 
-            current_signature.as_deref(), 
-            output_base
-        )?;
+            process_extracted_file(
+                config, 
+                &file_path, 
+                &current_content, 
+                current_signature.as_deref(), 
+                output_base
+            )?;
+        }
         files_extracted += 1;
     }
     
