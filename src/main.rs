@@ -524,7 +524,16 @@ fn write_file_content(config: &mut ScrapeConfig, file_path: &str, data: &[u8], i
     if let Some(output_file) = &mut config.output_file {
         if config.use_signature && !is_binary {
             if let Some(keypair) = &config.keypair {
-                let signature = sign_data(keypair, data);
+                // For signing, we need to use the exact same data format that will be used for verification
+                let content_str = str::from_utf8(data).unwrap_or("Non-UTF8 content");
+                
+                // Log what we're signing
+                if config.verbose {
+                    debug!("Signing content for file: {}", file_path);
+                    debug!("Content length for signing: {} bytes", content_str.len());
+                }
+                
+                let signature = sign_data(keypair, content_str.as_bytes());
                 writeln!(output_file, "'''--- {} --- [SIGNATURE:{}]", file_path, signature)?;
             } else {
                 writeln!(output_file, "'''--- {} ---", file_path)?;
@@ -839,10 +848,20 @@ fn process_extracted_file(
     if config.use_signature && config.public_key.is_some() {
         match signature {
             Some(sig) => {
-                let content_bytes = content.join("\n").as_bytes().to_vec();
+                debug!("Verifying signature for file: {}", file_path);
+                
+                // Join content with newlines - this is critical for signature verification
+                let content_str = content.join("\n");
+                
+                // Log content length for debugging
+                debug!("Content length for verification: {} bytes", content_str.len());
+                
+                // Convert to bytes for verification
+                let content_bytes = content_str.as_bytes();
+                
                 if let Err(e) = verify_signature(
                     config.public_key.as_ref().unwrap(),
-                    &content_bytes,
+                    content_bytes,
                     sig
                 ) {
                     if config.verbose {
@@ -1246,12 +1265,29 @@ fn generate_keypair() -> Keypair {
 
 // Sign data with the keypair
 fn sign_data(keypair: &Keypair, data: &[u8]) -> String {
+    debug!("Signing data of length: {} bytes", data.len());
+    
+    // Log a sample of the data being signed (first 100 bytes or less)
+    let sample_len = std::cmp::min(data.len(), 100);
+    let data_sample = String::from_utf8_lossy(&data[0..sample_len]);
+    debug!("Data sample (first {} bytes): {:?}", sample_len, data_sample);
+    
     let signature = keypair.sign(data);
-    general_purpose::STANDARD.encode(signature.to_bytes())
+    let encoded = general_purpose::STANDARD.encode(signature.to_bytes());
+    debug!("Generated signature: {}", encoded);
+    encoded
 }
 
 // Verify a signature
 fn verify_signature(public_key: &PublicKey, data: &[u8], signature_str: &str) -> Result<(), String> {
+    debug!("Verifying signature: {}", signature_str);
+    debug!("Data length: {} bytes", data.len());
+    
+    // Log a sample of the data being verified (first 100 bytes or less)
+    let sample_len = std::cmp::min(data.len(), 100);
+    let data_sample = String::from_utf8_lossy(&data[0..sample_len]);
+    debug!("Data sample (first {} bytes): {:?}", sample_len, data_sample);
+    
     let signature_bytes = general_purpose::STANDARD.decode(signature_str)
         .map_err(|e| format!("Invalid signature encoding: {}", e))?;
     
@@ -1259,9 +1295,19 @@ fn verify_signature(public_key: &PublicKey, data: &[u8], signature_str: &str) ->
         return Err(format!("Invalid signature length: {}", signature_bytes.len()));
     }
     
+    debug!("Decoded signature length: {} bytes", signature_bytes.len());
+    
     let signature = Signature::from_bytes(&signature_bytes)
         .map_err(|e| format!("Invalid signature: {}", e))?;
     
-    public_key.verify(data, &signature)
-        .map_err(|e| format!("Signature verification failed: {}", e))
+    match public_key.verify(data, &signature) {
+        Ok(_) => {
+            debug!("Signature verification successful");
+            Ok(())
+        },
+        Err(e) => {
+            error!("Signature verification failed: {}", e);
+            Err(format!("Signature verification failed: {}", e))
+        }
+    }
 }
