@@ -741,7 +741,7 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
                 )?;
                 files_extracted += 1;
                 current_content.clear();
-                current_signature = None;
+                // No need to reset current_signature as it will be overwritten in the next iteration
             }
             
             // Parse the header line to extract file path and optional signature
