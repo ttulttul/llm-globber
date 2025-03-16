@@ -79,6 +79,7 @@ OPTIONS:
     -t, --types <TYPES>        File types to include (comma separated, e.g., '.c,.h,.txt')
     -v, --verbose              Verbose output
     -V, --version              Print version information
+    --signature                Add ed25519 signatures to files when globbing and verify signatures when unglobbing
     --git <PATH>               Process a git repository (auto-configures path, name, and files)
 ```
 
@@ -133,6 +134,12 @@ llm_globber --git /path/to/repo -o output -t .py,.js,.html
 
 # Process a git repository with verbose output
 llm_globber --git /path/to/repo -o output -v
+
+# Process files with cryptographic signatures for tamper protection
+llm_globber -o output -n secure_files --signature -r /path/to/project
+
+# Extract files from a globbed file with signature verification
+llm_globber -u globbed_file.txt -o extracted_files --signature
 ```
 ## Safety Features
 
@@ -141,7 +148,42 @@ llm_globber --git /path/to/repo -o output -v
 - **Binary File Detection:** Detects and handles binary files safely, preventing output corruption by omitting binary content.
 - **Dot File Warnings:** Provides warnings when including dot files to remind users about potentially sensitive hidden files.
 - **Secure File Permissions:** Sets restrictive permissions (0600) on output files to protect sensitive data.
+- **Cryptographic Signatures:** Optional ed25519 signatures for file content integrity verification, protecting against tampering when files are shared.
 - **Error Handling:** Comprehensive error handling to gracefully manage issues during file processing and provide informative error messages.
+
+## Cryptographic Signatures
+
+LLM Globber includes an optional cryptographic signature system to ensure file integrity when sharing code or documentation:
+
+### How It Works
+
+1. **Signing Mode**: When using `--signature` with normal globbing:
+   - A new ed25519 keypair is generated for each run
+   - The public key is stored at the beginning of the output file
+   - Each file's content is signed with the private key
+   - Signatures are stored in the file headers
+
+2. **Verification Mode**: When using `--signature` with unglobbing:
+   - The public key is extracted from the input file
+   - Each file's signature is verified before extraction
+   - Files with invalid signatures are rejected
+   - This prevents tampering with the content between creation and extraction
+
+### Security Benefits
+
+- **Tamper Detection**: Any modification to file content after globbing will be detected
+- **Integrity Verification**: Ensures files are extracted exactly as they were originally globbed
+- **Cryptographic Strength**: Uses ed25519, a modern and secure signature algorithm
+
+### Usage Examples
+
+```bash
+# Create a globbed file with signatures
+llm_globber -o output -n secure_code --signature -r /path/to/code
+
+# Extract files with signature verification
+llm_globber -u output/secure_code_1234567890.txt -o extracted --signature
+```
 
 ## Performance Optimizations
 
@@ -167,6 +209,23 @@ The output file will have the following format:
 ...
 ```
 
+When using the `--signature` option, the output includes cryptographic signatures:
+
+```
+'''--- PUBLIC_KEY --- [KEY:base64EncodedPublicKey]
+'''
+
+'''--- file1.c --- [SIGNATURE:base64EncodedSignature]
+[Contents of file1.c]
+'''
+
+'''--- file2.h --- [SIGNATURE:base64EncodedSignature]
+[Contents of file2.h]
+'''
+
+...
+```
+
 Each file's content is enclosed within `'''--- <filepath> ---` and `'''` markers, making it easy to parse and identify individual file contents. An extra blank line is added after each file block for better readability.
 
 ## Binary File Handling
@@ -185,8 +244,9 @@ This ensures that the output file remains a clean text file, suitable for LLM in
 
 ### v0.2.0 (2025-03-14)
 - **Git Integration**: Added `--git` option for automatic repository processing
+- **Cryptographic Signatures**: Added `--signature` option for content integrity verification
 - **Filename Handling**: Improved automatic filename generation with git integration
-- **Documentation**: Updated usage documentation for git workflow
+- **Documentation**: Updated usage documentation for git workflow and signature verification
 
 ### v0.1.5 (2025-03-10)
 - **Bug Fixes**: Resolved divide-by-zero error in progress calculation
