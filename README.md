@@ -134,13 +134,25 @@ llm_globber --git /path/to/repo -o output -t .py,.js,.html
 
 # Process a git repository with verbose output
 llm_globber --git /path/to/repo -o output -v
+```
 
-# Process files with cryptographic signatures for tamper protection
-llm_globber -o output -n secure_files --signature -r /path/to/project
+## Unglob Mode
 
-# Extract files from a globbed file with signature verification
+LLM Globber can extract files from a previously generated output file using the `--unglob` option:
+
+```bash
+# Extract files from a globbed file
+llm_globber -u globbed_file.txt -o extracted_files
+
+# Extract files with signature verification
 llm_globber -u globbed_file.txt -o extracted_files --signature
 ```
+
+This is useful for:
+- Sharing code with collaborators who need the original file structure
+- Extracting specific files from a large collection
+- Restoring files from a backup
+- Securely sharing files with tamper protection (when using `--signature`)
 ## Safety Features
 
 - **Memory Safety:** Implemented in Rust, ensuring memory safety and preventing common vulnerabilities like buffer overflows.
