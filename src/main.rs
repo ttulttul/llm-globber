@@ -494,7 +494,6 @@ fn is_allowed_file_type(config: &ScrapeConfig, file_path: &str) -> bool {
         .and_then(|ext| ext.to_str())
         .map(|extension| format!(".{}", extension))
         .map_or(false, |ext_with_dot| config.file_type_hash.contains(&ext_with_dot))
-    }
 }
 
 fn set_secure_file_permissions(path: &PathBuf) -> Result<(), String> {
