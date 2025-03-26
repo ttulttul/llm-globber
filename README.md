@@ -254,6 +254,13 @@ This ensures that the output file remains a clean text file, suitable for LLM in
 
 ## Changelog
 
+### v0.2.2 (2025-03-26)
+- **Refactor**: Enhanced safety in mutex locking and path handling during unglobbing.
+- **Refactor**: Improved performance by using `HashSet` for file type filtering.
+- **Refactor**: Extracted signature-related debug logging into a reusable helper function.
+- **Refactor**: Improved robustness of file header parsing.
+- **Fix**: Corrected logic in `is_allowed_file_type` function.
+
 ### v0.2.1 (2025-03-26)
 - **Code Structure**: Improved internal organization of signature handling and unglobbing logic.
 - **Documentation**: Updated README with details on recent changes.
