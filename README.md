@@ -254,6 +254,10 @@ This ensures that the output file remains a clean text file, suitable for LLM in
 
 ## Changelog
 
+### v0.2.1 (2025-03-26)
+- **Code Structure**: Improved internal organization of signature handling and unglobbing logic.
+- **Documentation**: Updated README with details on recent changes.
+
 ### v0.2.0 (2025-03-14)
 - **Git Integration**: Added `--git` option for automatic repository processing
 - **Cryptographic Signatures**: Added `--signature` option for content integrity verification
