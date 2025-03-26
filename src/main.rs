@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{App, Arg};
+use std::collections::HashSet;
+
 use glob::{glob, Pattern};
 use log::{debug, error, info, warn, LevelFilter, Log, Metadata, Record, SetLoggerError};
 use memmap2::MmapOptions;
@@ -44,6 +46,39 @@ impl From<LogLevel> for LevelFilter {
     }
 }
 
+// Helper function for consistent debug logging during signing/verification
+fn log_signature_debug_info(context: &str, file_path: &str, data: &[u8]) {
+    debug!("{} signature for file: {}", context, file_path);
+    debug!("Content length for {}: {} bytes", context.to_lowercase(), data.len());
+
+    // Calculate and log hash of content for debugging
+    let mut hash_value: u64 = 0;
+    for &byte in data.iter().take(1000) {
+        hash_value = hash_value.wrapping_mul(31).wrapping_add(byte as u64);
+    }
+    debug!("Content hash (first 1000 bytes): {}", hash_value);
+
+    // Log content samples at different positions
+    let samples = [
+        (0, std::cmp::min(50, data.len())),
+        (std::cmp::min(100, data.len().saturating_sub(50)), std::cmp::min(150, data.len())),
+        (data.len().saturating_sub(50), data.len())
+    ];
+
+    for (i, (start, end)) in samples.iter().enumerate() {
+        if *start < *end {
+            let sample = String::from_utf8_lossy(&data[*start..*end]);
+            debug!("Content sample {} (bytes {}-{}): {:?}", i+1, start, end, sample);
+        }
+    }
+
+    // Log exact bytes being processed (for small files)
+    if data.len() < 500 {
+        debug!("Full content being {}: {:?}", context.to_lowercase(), String::from_utf8_lossy(data));
+        debug!("Raw bytes: {:?}", data);
+    }
+}
+
 static GLOBAL_LOGGER: GlobalLogger = GlobalLogger {
     level: Mutex::new(LogLevel::Warn), // Default to Warn
     quiet_mode: Mutex::new(false),
@@ -56,15 +91,15 @@ struct GlobalLogger {
 
 impl Log for GlobalLogger {
     fn enabled(&self, metadata: &Metadata) -> bool {
-        if *self.quiet_mode.lock().unwrap() {
+        if *self.quiet_mode.lock().expect("Quiet mode mutex poisoned") {
             return false;
         }
-        metadata.level() <= LevelFilter::from(*self.level.lock().unwrap()).to_level().unwrap()
+        metadata.level() <= LevelFilter::from(*self.level.lock().expect("Log level mutex poisoned")).to_level().unwrap() // unwrap() on to_level() is fine here
     }
 
     fn log(&self, record: &Record) {
         if self.enabled(record.metadata()) {
-            if *self.quiet_mode.lock().unwrap() {
+            if *self.quiet_mode.lock().expect("Quiet mode mutex poisoned") {
                 return;
             }
             eprintln!("[{}] {}: {}",
@@ -84,12 +119,12 @@ fn init_logger() -> Result<(), SetLoggerError> {
 }
 
 fn set_log_level(level: LogLevel) {
-    *GLOBAL_LOGGER.level.lock().unwrap() = level;
+    *GLOBAL_LOGGER.level.lock().expect("Log level mutex poisoned") = level;
     log::set_max_level(LevelFilter::from(level));
 }
 
 fn set_quiet_mode(quiet: bool) {
-    *GLOBAL_LOGGER.quiet_mode.lock().unwrap() = quiet;
+    *GLOBAL_LOGGER.quiet_mode.lock().expect("Quiet mode mutex poisoned") = quiet;
 }
 
 
@@ -109,7 +144,7 @@ struct ScrapeConfig {
     file_entries: Vec<FileEntry>,
     output_path: String,
     output_filename: String,
-    file_type_hash: Vec<ExtHashEntry>, // Using Vec<String> instead of hash table for simplicity, can be HashMap<String, ()> for faster lookup if needed
+    file_type_hash: HashSet<ExtHashEntry>, // Use HashSet for efficient extension lookups
     filter_files: bool,
     recursive: bool,
     name_pattern: String,
@@ -140,7 +175,7 @@ impl ScrapeConfig {
             file_entries: self.file_entries.clone(),
             output_path: self.output_path.clone(),
             output_filename: self.output_filename.clone(),
-            file_type_hash: self.file_type_hash.clone(),
+            file_type_hash: self.file_type_hash.clone(), // HashSet implements Clone
             filter_files: self.filter_files,
             recursive: self.recursive,
             name_pattern: self.name_pattern.clone(),
@@ -172,7 +207,7 @@ impl Default for ScrapeConfig {
             file_entries: Vec::new(),
             output_path: String::new(),
             output_filename: String::new(),
-            file_type_hash: Vec::new(),
+            file_type_hash: HashSet::new(), // Initialize as empty HashSet
             filter_files: true,
             recursive: false,
             name_pattern: String::new(),
@@ -332,7 +367,7 @@ fn parse_file_types(config: &mut ScrapeConfig, types_str: &str) {
             } else {
                 trimmed_ext.to_string()
             };
-            config.file_type_hash.push(ext_with_dot);
+            config.file_type_hash.insert(ext_with_dot); // Insert into HashSet
         }
     }
 }
@@ -454,11 +489,11 @@ fn is_allowed_file_type(config: &ScrapeConfig, file_path: &str) -> bool {
         return true;
     }
 
-    if let Some(extension) = Path::new(file_path).extension().and_then(|ext| ext.to_str()) {
-        let ext_with_dot = format!(".{}", extension);
-        config.file_type_hash.contains(&ext_with_dot)
-    } else {
-        false
+    Path::new(file_path)
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .map(|extension| format!(".{}", extension))
+        .map_or(false, |ext_with_dot| config.file_type_hash.contains(&ext_with_dot))
     }
 }
 
@@ -567,46 +602,19 @@ fn _glob_match_alt(pattern: &str, name: &str) -> Result<bool, String> {
 
 
 fn write_file_content(config: &mut ScrapeConfig, file_path: &str, data: &[u8], is_binary: bool) -> io::Result<()> {
-    let _lock = config.output_mutex.lock().unwrap(); // Acquire mutex lock
+    let _lock = config.output_mutex.lock().expect("Output file mutex poisoned"); // Acquire mutex lock
 
     if let Some(output_file) = &mut config.output_file {
         if config.use_signature && !is_binary {
             if let Some(keypair) = &config.keypair {
                 // For signing, we need to use the exact same data format that will be used for verification
-                let content_str = str::from_utf8(data).unwrap_or("Non-UTF8 content");
+                // For signing, use the raw bytes if possible, fallback for non-UTF8 is less ideal for signing
+                // but matches previous behavior. Consider enforcing UTF-8 if signing is critical.
+                let content_bytes = data; // Sign the raw bytes directly
                 
-                // Log what we're signing
-                debug!("Signing content for file: {}", file_path);
-                debug!("Content length for signing: {} bytes", content_str.len());
-                
-                // Calculate and log hash of content for debugging
-                let content_bytes = content_str.as_bytes();
-                let mut hash_value: u64 = 0;
-                for &byte in content_bytes.iter().take(1000) {
-                    hash_value = hash_value.wrapping_mul(31).wrapping_add(byte as u64);
-                }
-                debug!("Content hash (first 1000 bytes): {}", hash_value);
-                
-                // Log content samples at different positions
-                let samples = [
-                    (0, std::cmp::min(50, content_bytes.len())),
-                    (std::cmp::min(100, content_bytes.len().saturating_sub(50)), std::cmp::min(150, content_bytes.len())),
-                    (content_bytes.len().saturating_sub(50), content_bytes.len())
-                ];
-                
-                for (i, (start, end)) in samples.iter().enumerate() {
-                    if *start < *end {
-                        let sample = String::from_utf8_lossy(&content_bytes[*start..*end]);
-                        debug!("Content sample {} (bytes {}-{}): {:?}", i+1, start, end, sample);
-                    }
-                }
-                
-                // Log exact bytes being signed (for small files)
-                if content_bytes.len() < 500 {
-                    debug!("Full content being signed: {:?}", String::from_utf8_lossy(content_bytes));
-                    debug!("Raw bytes: {:?}", content_bytes);
-                }
-                
+                // Use helper for debug logging
+                log_signature_debug_info("Signing", file_path, content_bytes);
+
                 let signature = sign_data(keypair, content_bytes);
                 debug!("Generated signature for {}: {}", file_path, signature);
                 writeln!(output_file, "'''--- {} --- [SIGNATURE:{}]", file_path, signature)?;
@@ -684,10 +692,11 @@ fn print_progress(config: &ScrapeConfig) {
 
 fn print_header(msg: &str) {
     // Only print headers if we're in debug mode and not in quiet mode
-    if *GLOBAL_LOGGER.level.lock().unwrap() < LogLevel::Debug || *GLOBAL_LOGGER.quiet_mode.lock().unwrap() {
+    if *GLOBAL_LOGGER.level.lock().expect("Log level mutex poisoned") < LogLevel::Debug
+        || *GLOBAL_LOGGER.quiet_mode.lock().expect("Quiet mode mutex poisoned") {
         return;
     }
-    // Only print to stdout if we're not in quiet mode
+    // Only print to stderr if we're not in quiet mode
     eprintln!();
     eprintln!("{}", "=".repeat(80));
     eprintln!("{}", msg);
@@ -942,31 +951,36 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
 
 // Helper function to parse a file header line
 fn parse_file_header(line: &str) -> Result<(String, Option<String>), String> {
-    // Check for file header with signature
-    // Format: '''--- path/to/file.txt --- [SIGNATURE:base64data]
-    if line.contains(" --- [SIGNATURE:") && line.ends_with("]") {
-        let sig_start = line.find(" --- [SIGNATURE:").unwrap() + 16;
-        let sig_end = line.len() - 1;
-        let file_path_end = sig_start - 16;
-        
-        let file_path = line[7..file_path_end].trim().to_string();
-        let signature = line[sig_start..sig_end].to_string();
-        
-        Ok((file_path, Some(signature)))
-    } 
-    // Check for public key header (should be handled separately)
-    // Format: '''--- PUBLIC_KEY --- [KEY:base64data]
-    else if line.starts_with("'''--- PUBLIC_KEY ---") {
-        Err("Public key header should be handled separately".to_string())
+    let trimmed_line = line.trim();
+
+    // Ensure it starts with '''--- and ends with --- or ]
+    if !trimmed_line.starts_with("'''--- ") || !(trimmed_line.ends_with(" ---") || trimmed_line.ends_with(']')) {
+        return Err(format!("Invalid file header format: {}", line));
     }
-    // Check for file header without signature
-    // Format: '''--- path/to/file.txt ---
-    else if line.ends_with(" ---") {
-        let file_path = line[7..line.len()-4].trim().to_string();
+
+    // Strip prefix '''---
+    let content = trimmed_line.strip_prefix("'''--- ").ok_or_else(|| format!("Failed to strip prefix: {}", line))?;
+
+    // Check for signature: path --- [SIGNATURE:...]
+    if let Some((path_part, sig_part)) = content.rsplit_once(" --- [SIGNATURE:") {
+        if let Some(signature) = sig_part.strip_suffix(']') {
+            let file_path = path_part.trim().to_string();
+            Ok((file_path, Some(signature.to_string())))
+        } else {
+            Err(format!("Invalid signature format in header: {}", line))
+        }
+    }
+    // Check for simple header: path ---
+    else if let Some(path_part) = content.strip_suffix(" ---") {
+        let file_path = path_part.trim().to_string();
         Ok((file_path, None))
     }
+    // Check for public key header (should not be parsed here ideally)
+    else if content.starts_with("PUBLIC_KEY --- [KEY:") {
+         Err("Public key header should be handled separately".to_string())
+    }
     else {
-        Err(format!("Invalid file header format: {}", line))
+        Err(format!("Unrecognized file header format: {}", line))
     }
 }
 
@@ -978,58 +992,28 @@ fn process_extracted_file(
     signature: Option<&str>,
     output_base: &Path
 ) -> Result<(), String> {
-    // For the output path, we need to strip any "test_files/" prefix
-    // from the original path to avoid nesting
-    let stripped_path = if file_path.starts_with("test_files/") {
-        file_path.trim_start_matches("test_files/").to_string()
-    } else {
-        file_path.to_string()
-    };
-    
-    let output_file_path = output_base.join(&stripped_path).to_string_lossy().to_string();
-    
+    // Use Path::strip_prefix for safer and more robust path manipulation
+    let relative_path = Path::new(file_path)
+        .strip_prefix("test_files/")
+        .unwrap_or_else(|_| Path::new(file_path)); // Fallback if prefix not found
+
+    let output_file_path = output_base.join(relative_path);
+    let output_file_path_str = output_file_path.to_string_lossy().to_string(); // Keep string version for logging/errors
+
     // Verify signature if needed
     if config.use_signature && config.public_key.is_some() {
         match signature {
             Some(sig) => {
-                debug!("Verifying signature for file: {}", file_path);
-                
                 // Join content with newlines - this is critical for signature verification
+                // Note: This assumes the original file used '\n' line endings.
                 let content_str = content.join("\n");
-                
-                // Log content length for debugging
-                debug!("Content length for verification: {} bytes", content_str.len());
-                
-                // Calculate and log hash of content for debugging
                 let content_bytes = content_str.as_bytes();
-                let mut hash_value: u64 = 0;
-                for &byte in content_bytes.iter().take(1000) {
-                    hash_value = hash_value.wrapping_mul(31).wrapping_add(byte as u64);
-                }
-                debug!("Content hash (first 1000 bytes): {}", hash_value);
-                
-                // Log content samples at different positions
-                let samples = [
-                    (0, std::cmp::min(50, content_bytes.len())),
-                    (std::cmp::min(100, content_bytes.len().saturating_sub(50)), std::cmp::min(150, content_bytes.len())),
-                    (content_bytes.len().saturating_sub(50), content_bytes.len())
-                ];
-                
-                for (i, (start, end)) in samples.iter().enumerate() {
-                    if *start < *end {
-                        let sample = String::from_utf8_lossy(&content_bytes[*start..*end]);
-                        debug!("Content sample {} (bytes {}-{}): {:?}", i+1, start, end, sample);
-                    }
-                }
-                
-                // Log exact bytes being verified (for small files)
-                if content_bytes.len() < 500 {
-                    debug!("Full content being verified: {:?}", String::from_utf8_lossy(content_bytes));
-                    debug!("Raw bytes: {:?}", content_bytes);
-                }
-                
+
+                // Use helper for debug logging
+                log_signature_debug_info("Verifying", file_path, content_bytes);
+
                 if let Err(e) = verify_signature(
-                    config.public_key.as_ref().unwrap(),
+                    config.public_key.as_ref().expect("Public key missing during verification"), // Use expect here
                     content_bytes,
                     sig
                 ) {
@@ -1046,18 +1030,19 @@ fn process_extracted_file(
             }
         }
     }
-    
-    debug!("Extracting file: {} to {}", file_path, output_file_path);
+
+    debug!("Extracting file: {} to {}", file_path, output_file_path_str);
     write_extracted_file(&output_file_path, content)
-        .map_err(|e| format!("Failed to write file {}: {}", output_file_path, e))
+        .map_err(|e| format!("Failed to write file {}: {}", output_file_path_str, e))
 }
 
-fn write_extracted_file(file_path: &str, content: &[String]) -> io::Result<()> {
+// Update function signature to accept Path
+fn write_extracted_file(file_path: &Path, content: &[String]) -> io::Result<()> {
     // Create directory structure if needed
-    if let Some(parent) = Path::new(file_path).parent() {
+    if let Some(parent) = file_path.parent() {
         fs::create_dir_all(parent)?;
     }
-    
+
     let mut file = File::create(file_path)?;
     
     // Join all lines with a single newline and write at once
