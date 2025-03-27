@@ -240,6 +240,30 @@ When using the `--signature` option, the output includes cryptographic signature
 
 Each file's content is enclosed within `'''--- <filepath> ---` and `'''` markers, making it easy to parse and identify individual file contents. An extra blank line is added after each file block for better readability.
 
+## Testing
+
+The project includes a test suite located in the `tests/` directory. The tests are written in Bash and utilize a common helper script `tests/test_common.sh`.
+
+To run the full test suite:
+
+```bash
+cd tests
+./test_llm_globber.sh
+```
+
+This script will execute individual test files (e.g., `test_basic.sh`, `test_recursive.sh`, `test_signature.sh`, etc.) and report a summary of the results.
+
+The test suite covers various functionalities, including:
+- Basic file globbing
+- Recursive processing
+- File type filtering
+- Name pattern filtering
+- Dotfile handling
+- Verbose and quiet modes
+- Unglobbing (file extraction)
+- Signature generation and verification
+- Git repository integration
+
 ## Binary File Handling
 
 When a binary file is detected, its contents are not included in the output file. Instead, the output file will contain:
