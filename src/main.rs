@@ -10,12 +10,12 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use clap::{App, Arg};
 use std::collections::HashSet;
 
+use base64::{engine::general_purpose, Engine};
+use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
 use glob::{glob, Pattern};
 use log::{debug, error, info, warn, LevelFilter, Log, Metadata, Record, SetLoggerError};
 use memmap2::MmapOptions;
-use ed25519_dalek::{Keypair, Signer, Verifier, PublicKey, Signature};
 use rand::rngs::OsRng;
-use base64::{engine::general_purpose, Engine};
 
 #[cfg(test)]
 mod tests;
@@ -49,7 +49,11 @@ impl From<LogLevel> for LevelFilter {
 // Helper function for consistent debug logging during signing/verification
 fn log_signature_debug_info(context: &str, file_path: &str, data: &[u8]) {
     debug!("{} signature for file: {}", context, file_path);
-    debug!("Content length for {}: {} bytes", context.to_lowercase(), data.len());
+    debug!(
+        "Content length for {}: {} bytes",
+        context.to_lowercase(),
+        data.len()
+    );
 
     // Calculate and log hash of content for debugging
     let mut hash_value: u64 = 0;
@@ -61,20 +65,33 @@ fn log_signature_debug_info(context: &str, file_path: &str, data: &[u8]) {
     // Log content samples at different positions
     let samples = [
         (0, std::cmp::min(50, data.len())),
-        (std::cmp::min(100, data.len().saturating_sub(50)), std::cmp::min(150, data.len())),
-        (data.len().saturating_sub(50), data.len())
+        (
+            std::cmp::min(100, data.len().saturating_sub(50)),
+            std::cmp::min(150, data.len()),
+        ),
+        (data.len().saturating_sub(50), data.len()),
     ];
 
     for (i, (start, end)) in samples.iter().enumerate() {
         if *start < *end {
             let sample = String::from_utf8_lossy(&data[*start..*end]);
-            debug!("Content sample {} (bytes {}-{}): {:?}", i+1, start, end, sample);
+            debug!(
+                "Content sample {} (bytes {}-{}): {:?}",
+                i + 1,
+                start,
+                end,
+                sample
+            );
         }
     }
 
     // Log exact bytes being processed (for small files)
     if data.len() < 500 {
-        debug!("Full content being {}: {:?}", context.to_lowercase(), String::from_utf8_lossy(data));
+        debug!(
+            "Full content being {}: {:?}",
+            context.to_lowercase(),
+            String::from_utf8_lossy(data)
+        );
         debug!("Raw bytes: {:?}", data);
     }
 }
@@ -94,7 +111,10 @@ impl Log for GlobalLogger {
         if *self.quiet_mode.lock().expect("Quiet mode mutex poisoned") {
             return false;
         }
-        metadata.level() <= LevelFilter::from(*self.level.lock().expect("Log level mutex poisoned")).to_level().unwrap() // unwrap() on to_level() is fine here
+        metadata.level()
+            <= LevelFilter::from(*self.level.lock().expect("Log level mutex poisoned"))
+                .to_level()
+                .unwrap() // unwrap() on to_level() is fine here
     }
 
     fn log(&self, record: &Record) {
@@ -102,10 +122,12 @@ impl Log for GlobalLogger {
             if *self.quiet_mode.lock().expect("Quiet mode mutex poisoned") {
                 return;
             }
-            eprintln!("[{}] {}: {}",
-                      chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                      record.level(),
-                      record.args());
+            eprintln!(
+                "[{}] {}: {}",
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
+                record.level(),
+                record.args()
+            );
         }
     }
 
@@ -119,14 +141,19 @@ fn init_logger() -> Result<(), SetLoggerError> {
 }
 
 fn set_log_level(level: LogLevel) {
-    *GLOBAL_LOGGER.level.lock().expect("Log level mutex poisoned") = level;
+    *GLOBAL_LOGGER
+        .level
+        .lock()
+        .expect("Log level mutex poisoned") = level;
     log::set_max_level(LevelFilter::from(level));
 }
 
 fn set_quiet_mode(quiet: bool) {
-    *GLOBAL_LOGGER.quiet_mode.lock().expect("Quiet mode mutex poisoned") = quiet;
+    *GLOBAL_LOGGER
+        .quiet_mode
+        .lock()
+        .expect("Quiet mode mutex poisoned") = quiet;
 }
-
 
 #[derive(Debug, Clone)]
 struct FileEntry {
@@ -153,7 +180,7 @@ struct ScrapeConfig {
     no_dot_files: bool,
     max_file_size: u64,
     output_file: Option<BufWriter<File>>, // Using BufWriter for efficiency
-    output_mutex: Arc<Mutex<()>>,        // Using a simple Mutex for output synchronization
+    output_mutex: Arc<Mutex<()>>,         // Using a simple Mutex for output synchronization
     abort_on_error: bool,
     show_progress: bool,
     processed_files: usize,
@@ -242,7 +269,12 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
 
     let output_path = PathBuf::from(&config.output_path);
     if !output_path.exists() {
-        fs::create_dir_all(&output_path).map_err(|e| format!("Could not create output directory: {}: {}", config.output_path, e))?;
+        fs::create_dir_all(&output_path).map_err(|e| {
+            format!(
+                "Could not create output directory: {}: {}",
+                config.output_path, e
+            )
+        })?;
         info!("Created output directory: {}", config.output_path);
     }
 
@@ -252,20 +284,29 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
         .as_secs();
     let output_file_name = format!("{}_{}.txt", config.output_filename, timestamp);
     let output_file_path = output_path.join(output_file_name);
-    let output_file = File::create(&output_file_path)
-        .map_err(|e| format!("Error creating output file: {}: {}", output_file_path.display(), e))?;
+    let output_file = File::create(&output_file_path).map_err(|e| {
+        format!(
+            "Error creating output file: {}: {}",
+            output_file_path.display(),
+            e
+        )
+    })?;
 
     set_secure_file_permissions(&output_file_path)?;
 
     config.output_file = Some(BufWriter::with_capacity(IO_BUFFER_SIZE, output_file));
-    
+
     // Write public key at the start of the file if signature is enabled
     if config.use_signature {
         if let Some(public_key) = &config.public_key {
             let encoded_pubkey = general_purpose::STANDARD.encode(public_key.to_bytes());
             if let Some(output_file) = &mut config.output_file {
-                writeln!(output_file, "'''--- PUBLIC_KEY --- [KEY:{}]", encoded_pubkey)
-                    .map_err(|e| format!("Error writing public key to output file: {}", e))?;
+                writeln!(
+                    output_file,
+                    "'''--- PUBLIC_KEY --- [KEY:{}]",
+                    encoded_pubkey
+                )
+                .map_err(|e| format!("Error writing public key to output file: {}", e))?;
                 writeln!(output_file, "'''\n")
                     .map_err(|e| format!("Error writing public key to output file: {}", e))?;
             }
@@ -275,8 +316,12 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
 
     let mut files_processed = 0;
     // Create a copy of the paths to avoid borrowing issues
-    let file_paths: Vec<String> = config.file_entries.iter().map(|entry| entry.path.clone()).collect();
-    
+    let file_paths: Vec<String> = config
+        .file_entries
+        .iter()
+        .map(|entry| entry.path.clone())
+        .collect();
+
     for (i, file_path) in file_paths.iter().enumerate() {
         if process_file(config, file_path).is_ok() {
             files_processed += 1;
@@ -291,7 +336,13 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
     }
 
     if files_processed == 0 {
-        fs::remove_file(&output_file_path).map_err(|e| format!("Warning: No files processed, and could not remove empty output file: {}: {}", output_file_path.display(), e))?;
+        fs::remove_file(&output_file_path).map_err(|e| {
+            format!(
+                "Warning: No files processed, and could not remove empty output file: {}: {}",
+                output_file_path.display(),
+                e
+            )
+        })?;
         return Err("No files were processed".to_string());
     }
 
@@ -307,7 +358,6 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
     } else {
         info!("Skipping cleanup for basic test file");
     }
-
 
     if !config.quiet {
         print_header("Processing Complete");
@@ -357,7 +407,6 @@ fn clean_up_text(filename: &str, max_consecutive_newlines: usize) -> io::Result<
     Ok(())
 }
 
-
 fn parse_file_types(config: &mut ScrapeConfig, types_str: &str) {
     for ext in types_str.split(',') {
         let trimmed_ext = ext.trim();
@@ -383,10 +432,15 @@ fn print_usage(program_name: &str) {
     println!("  -r             Recursively process directories");
     println!("  -N, --pattern PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')");
     println!("  -j THREADS     [Deprecated] Number of worker threads (always 1)");
-    println!("  -s SIZE        Maximum file size in MB (default: {})", DEFAULT_MAX_FILE_SIZE / (1024 * 1024));
+    println!(
+        "  -s SIZE        Maximum file size in MB (default: {})",
+        DEFAULT_MAX_FILE_SIZE / (1024 * 1024)
+    );
     println!("  -d             Include dot files (hidden files)");
     println!("  -p             Show progress indicators");
-    println!("  -u, --unglob FILE  Extract files from a previously generated LLM Globber output file");
+    println!(
+        "  -u, --unglob FILE  Extract files from a previously generated LLM Globber output file"
+    );
     println!("  -e             Abort on errors (default is to continue)");
     println!("  -v             Verbose output");
     println!("  -q             Quiet mode (suppress all output)");
@@ -399,8 +453,7 @@ fn process_directory(config: &mut ScrapeConfig, dir_path: &str) -> Result<(), St
     let entries = fs::read_dir(dir_path)
         .map_err(|e| format!("Failed to read directory {}: {}", dir_path, e))?;
     for entry_result in entries {
-        let entry = entry_result
-            .map_err(|e| format!("Failed to read directory entry: {}", e))?;
+        let entry = entry_result.map_err(|e| format!("Failed to read directory entry: {}", e))?;
         let full_path = entry.path();
         let file_name = entry.file_name();
         let file_name_str = file_name.to_string_lossy();
@@ -431,9 +484,10 @@ fn add_file_entry(config: &mut ScrapeConfig, path: &str) {
         warn!("Maximum file limit reached ({})", MAX_FILES);
         return;
     }
-    config.file_entries.push(FileEntry { path: path.to_string() });
+    config.file_entries.push(FileEntry {
+        path: path.to_string(),
+    });
 }
-
 
 #[allow(dead_code)]
 fn is_directory(path: &str) -> bool {
@@ -493,7 +547,9 @@ fn is_allowed_file_type(config: &ScrapeConfig, file_path: &str) -> bool {
         .extension()
         .and_then(|ext| ext.to_str())
         .map(|extension| format!(".{}", extension))
-        .map_or(false, |ext_with_dot| config.file_type_hash.contains(&ext_with_dot))
+        .map_or(false, |ext_with_dot| {
+            config.file_type_hash.contains(&ext_with_dot)
+        })
 }
 
 fn set_secure_file_permissions(path: &PathBuf) -> Result<(), String> {
@@ -503,32 +559,43 @@ fn set_secure_file_permissions(path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-
 fn sanitize_path(path: &str) -> io::Result<String> {
     // Check for empty paths
     if path.trim().is_empty() {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Empty path provided"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Empty path provided",
+        ));
     }
-    
+
     // Check for null bytes which can be used in path traversal attacks
     if path.contains('\0') {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "Path contains null bytes"));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "Path contains null bytes",
+        ));
     }
-    
+
     // Convert to absolute path and normalize
     let path_buf = PathBuf::from(path);
     let canonical_path = path_buf.canonicalize()?;
-    
+
     // Verify the path exists after canonicalization
     if !canonical_path.exists() {
-        return Err(io::Error::new(io::ErrorKind::NotFound, "Path does not exist after canonicalization"));
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "Path does not exist after canonicalization",
+        ));
     }
-    
+
     Ok(canonical_path.to_string_lossy().to_string())
 }
 
-
-fn process_file_mmap(config: &mut ScrapeConfig, file_path: &str, _file_size: u64) -> io::Result<()> {
+fn process_file_mmap(
+    config: &mut ScrapeConfig,
+    file_path: &str,
+    _file_size: u64,
+) -> io::Result<()> {
     let file = File::open(file_path)?;
     let mmap = unsafe { MmapOptions::new().map(&file)? };
 
@@ -536,7 +603,6 @@ fn process_file_mmap(config: &mut ScrapeConfig, file_path: &str, _file_size: u64
     write_file_content(config, file_path, &mmap, is_binary)?;
     Ok(())
 }
-
 
 fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) -> bool {
     if base_name.starts_with('.') {
@@ -566,12 +632,15 @@ fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) 
             Err(e) => {
                 warn!("Pattern matching error: {}", e);
                 return false;
-            },
+            }
             _ => {}
         }
     }
 
-    if config.filter_files && !config.file_type_hash.is_empty() && !is_allowed_file_type(config, file_path) {
+    if config.filter_files
+        && !config.file_type_hash.is_empty()
+        && !is_allowed_file_type(config, file_path)
+    {
         return false;
     }
 
@@ -579,29 +648,34 @@ fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) 
 }
 
 fn glob_match(pattern: &str, name: &str) -> Result<bool, String> {
-    let pattern = Pattern::new(pattern)
-        .map_err(|e| format!("Pattern error: {}", e))?;
+    let pattern = Pattern::new(pattern).map_err(|e| format!("Pattern error: {}", e))?;
     Ok(pattern.matches(name))
 }
 
 fn _glob_match_alt(pattern: &str, name: &str) -> Result<bool, String> {
-    for path in glob(pattern)
-        .map_err(|e| format!("Pattern error: {}", e))? {
+    for path in glob(pattern).map_err(|e| format!("Pattern error: {}", e))? {
         match path {
             Ok(p) => {
                 if p.file_name().and_then(|s| s.to_str()) == Some(name) {
                     return Ok(true);
                 }
-            },
+            }
             Err(_) => continue,
         }
     }
     Ok(false)
 }
 
-
-fn write_file_content(config: &mut ScrapeConfig, file_path: &str, data: &[u8], is_binary: bool) -> io::Result<()> {
-    let _lock = config.output_mutex.lock().expect("Output file mutex poisoned"); // Acquire mutex lock
+fn write_file_content(
+    config: &mut ScrapeConfig,
+    file_path: &str,
+    data: &[u8],
+    is_binary: bool,
+) -> io::Result<()> {
+    let _lock = config
+        .output_mutex
+        .lock()
+        .expect("Output file mutex poisoned"); // Acquire mutex lock
 
     if let Some(output_file) = &mut config.output_file {
         if config.use_signature && !is_binary {
@@ -610,20 +684,24 @@ fn write_file_content(config: &mut ScrapeConfig, file_path: &str, data: &[u8], i
                 // For signing, use the raw bytes if possible, fallback for non-UTF8 is less ideal for signing
                 // but matches previous behavior. Consider enforcing UTF-8 if signing is critical.
                 let content_bytes = data; // Sign the raw bytes directly
-                
+
                 // Use helper for debug logging
                 log_signature_debug_info("Signing", file_path, content_bytes);
 
                 let signature = sign_data(keypair, content_bytes);
                 debug!("Generated signature for {}: {}", file_path, signature);
-                writeln!(output_file, "'''--- {} --- [SIGNATURE:{}]", file_path, signature)?;
+                writeln!(
+                    output_file,
+                    "'''--- {} --- [SIGNATURE:{}]",
+                    file_path, signature
+                )?;
             } else {
                 writeln!(output_file, "'''--- {} ---", file_path)?;
             }
         } else {
             writeln!(output_file, "'''--- {} ---", file_path)?;
         }
-        
+
         if is_binary {
             writeln!(output_file, "[Binary file - contents omitted]")?;
         } else {
@@ -639,7 +717,6 @@ fn write_file_content(config: &mut ScrapeConfig, file_path: &str, data: &[u8], i
     Ok(())
 }
 
-
 fn process_file(config: &mut ScrapeConfig, file_path: &str) -> io::Result<()> {
     if !is_regular_file(file_path) {
         warn!("Skipping invalid file path: {}", file_path);
@@ -653,7 +730,10 @@ fn process_file(config: &mut ScrapeConfig, file_path: &str) -> io::Result<()> {
         return process_file_mmap(config, file_path, file_size);
     }
 
-    let base_name = Path::new(file_path).file_name().and_then(|s| s.to_str()).unwrap_or("");
+    let base_name = Path::new(file_path)
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("");
 
     if !should_process_file(config, file_path, base_name) {
         return Ok(());
@@ -670,7 +750,6 @@ fn process_file(config: &mut ScrapeConfig, file_path: &str) -> io::Result<()> {
     Ok(())
 }
 
-
 fn print_progress(config: &ScrapeConfig) {
     if !config.show_progress || config.quiet {
         return;
@@ -683,16 +762,28 @@ fn print_progress(config: &ScrapeConfig) {
 
     let files_per_sec = config.processed_files as f64 / elapsed;
 
-    eprint!("\rProcessed {}/{} files ({:.1} files/sec), {} failed",
-            config.processed_files, config.file_entries.len(),
-            files_per_sec, config.failed_files);
+    eprint!(
+        "\rProcessed {}/{} files ({:.1} files/sec), {} failed",
+        config.processed_files,
+        config.file_entries.len(),
+        files_per_sec,
+        config.failed_files
+    );
     io::stderr().flush().unwrap();
 }
 
 fn print_header(msg: &str) {
     // Only print headers if we're in debug mode and not in quiet mode
-    if *GLOBAL_LOGGER.level.lock().expect("Log level mutex poisoned") < LogLevel::Debug
-        || *GLOBAL_LOGGER.quiet_mode.lock().expect("Quiet mode mutex poisoned") {
+    if *GLOBAL_LOGGER
+        .level
+        .lock()
+        .expect("Log level mutex poisoned")
+        < LogLevel::Debug
+        || *GLOBAL_LOGGER
+            .quiet_mode
+            .lock()
+            .expect("Quiet mode mutex poisoned")
+    {
         return;
     }
     // Only print to stderr if we're not in quiet mode
@@ -702,7 +793,6 @@ fn print_header(msg: &str) {
     eprintln!("{}", "=".repeat(80));
     eprintln!();
 }
-
 
 fn debug_dump_file(filename: &str) -> io::Result<()> {
     let file = File::open(filename)?;
@@ -723,7 +813,7 @@ fn get_git_repo_name(repo_path: &str) -> Result<String, String> {
         .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to execute git command: {}", e))?;
-    
+
     if output.status.success() {
         let url = String::from_utf8_lossy(&output.stdout).trim().to_string();
         // Extract repo name from URL (handles both HTTPS and SSH URLs)
@@ -731,7 +821,7 @@ fn get_git_repo_name(repo_path: &str) -> Result<String, String> {
             return Ok(repo_name.trim_end_matches(".git").to_string());
         }
     }
-    
+
     // Fallback: use the directory name
     let path = Path::new(repo_path);
     if let Some(dir_name) = path.file_name().and_then(|n| n.to_str()) {
@@ -747,13 +837,15 @@ fn get_git_branch(repo_path: &str) -> Result<String, String> {
         .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to execute git command: {}", e))?;
-    
+
     if output.status.success() {
         let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
         Ok(branch)
     } else {
-        Err(format!("Failed to get git branch: {}", 
-                   String::from_utf8_lossy(&output.stderr)))
+        Err(format!(
+            "Failed to get git branch: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ))
     }
 }
 
@@ -763,12 +855,14 @@ fn get_git_tracked_files(repo_path: &str) -> Result<Vec<String>, String> {
         .current_dir(repo_path)
         .output()
         .map_err(|e| format!("Failed to execute git command: {}", e))?;
-    
+
     if !output.status.success() {
-        return Err(format!("Failed to list git files: {}", 
-                          String::from_utf8_lossy(&output.stderr)));
+        return Err(format!(
+            "Failed to list git files: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
     }
-    
+
     let files = String::from_utf8_lossy(&output.stdout)
         .lines()
         .map(|line| {
@@ -776,7 +870,7 @@ fn get_git_tracked_files(repo_path: &str) -> Result<Vec<String>, String> {
             file_path.to_string_lossy().to_string()
         })
         .collect();
-    
+
     Ok(files)
 }
 
@@ -785,48 +879,54 @@ fn is_git_repository(path: &str) -> bool {
         .args(&["rev-parse", "--is-inside-work-tree"])
         .current_dir(path)
         .output();
-    
+
     match output {
         Ok(output) => output.status.success(),
-        Err(_) => false
+        Err(_) => false,
     }
 }
 
-
 fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     info!("Unglobbing file: {}", config.unglob_input_file);
-    
+
     // Check if the path is a directory
     let path = Path::new(&config.unglob_input_file);
     if path.is_dir() {
-        return Err(format!("Error: '{}' is a directory, not a file", config.unglob_input_file));
+        return Err(format!(
+            "Error: '{}' is a directory, not a file",
+            config.unglob_input_file
+        ));
     }
-    
-    let file = File::open(&config.unglob_input_file)
-        .map_err(|e| format!("Failed to open input file: {}: {}", config.unglob_input_file, e))?;
-    
+
+    let file = File::open(&config.unglob_input_file).map_err(|e| {
+        format!(
+            "Failed to open input file: {}: {}",
+            config.unglob_input_file, e
+        )
+    })?;
+
     let reader = BufReader::new(file);
     let mut lines = reader.lines();
-    
+
     let mut current_file: Option<String> = None;
     let mut current_content: Vec<String> = Vec::new();
     let mut current_signature: Option<String> = None;
     let mut files_extracted = 0;
     let mut in_file_content = false;
     let mut extracted_public_key: Option<PublicKey> = None;
-    
+
     // Get the base output directory
     let output_base = Path::new(&config.output_path);
-    
+
     while let Some(line_result) = lines.next() {
         let line = line_result.map_err(|e| format!("Error reading line: {}", e))?;
-        
+
         // Check for public key at the start of the file
         if line.starts_with("'''--- PUBLIC_KEY --- [KEY:") && line.ends_with("]") {
             let key_start = line.find("[KEY:").unwrap() + 5;
             let key_end = line.len() - 1;
             let encoded_key = &line[key_start..key_end];
-            
+
             // Decode and parse the public key
             match general_purpose::STANDARD.decode(encoded_key) {
                 Ok(key_bytes) => {
@@ -835,14 +935,17 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
                             Ok(public_key) => {
                                 extracted_public_key = Some(public_key);
                                 info!("Found public key in file: {}", encoded_key);
-                                
+
                                 // Skip the closing marker line
                                 if let Some(Ok(next_line)) = lines.next() {
                                     if next_line != "'''" {
-                                        return Err("Invalid public key format: missing closing marker".to_string());
+                                        return Err(
+                                            "Invalid public key format: missing closing marker"
+                                                .to_string(),
+                                        );
                                     }
                                 }
-                            },
+                            }
                             Err(e) => {
                                 warn!("Invalid public key format: {}", e);
                             }
@@ -850,14 +953,14 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
                     } else {
                         warn!("Invalid public key length: {}", key_bytes.len());
                     }
-                },
+                }
                 Err(e) => {
                     warn!("Failed to decode public key: {}", e);
                 }
             }
             continue;
         }
-        
+
         // Check for file header (with or without signature)
         if line.starts_with("'''--- ") {
             // If we were processing a file, write it out before starting a new one
@@ -865,43 +968,43 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
                 if config.use_signature && extracted_public_key.is_some() {
                     // Create a temporary config with the extracted public key
                     let temp_config = config.clone_for_verification(extracted_public_key);
-                    
+
                     process_extracted_file(
-                        &temp_config, 
-                        &file_path, 
-                        &current_content, 
-                        current_signature.as_deref(), 
-                        output_base
+                        &temp_config,
+                        &file_path,
+                        &current_content,
+                        current_signature.as_deref(),
+                        output_base,
                     )?;
                 } else {
                     process_extracted_file(
-                        config, 
-                        &file_path, 
-                        &current_content, 
-                        current_signature.as_deref(), 
-                        output_base
+                        config,
+                        &file_path,
+                        &current_content,
+                        current_signature.as_deref(),
+                        output_base,
                     )?;
                 }
                 files_extracted += 1;
                 current_content.clear();
                 // No need to reset current_signature as it will be overwritten in the next iteration
             }
-            
+
             // Parse the header line to extract file path and optional signature
             let (file_path, signature) = parse_file_header(&line)?;
-            
+
             current_file = Some(file_path);
             current_signature = signature;
             in_file_content = true;
             continue;
         }
-        
+
         // Check for end of file marker
         if line == "'''" && in_file_content {
             in_file_content = false;
             continue;
         }
-        
+
         // If we're in file content, add the line
         if in_file_content && current_file.is_some() {
             // Skip binary file markers
@@ -910,40 +1013,40 @@ fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
                 in_file_content = false;
                 continue;
             }
-            
+
             current_content.push(line);
         }
     }
-    
+
     // Handle the last file if any
     if let Some(file_path) = current_file {
         if config.use_signature && extracted_public_key.is_some() {
             // Create a temporary config with the extracted public key
             let temp_config = config.clone_for_verification(extracted_public_key);
-            
+
             process_extracted_file(
-                &temp_config, 
-                &file_path, 
-                &current_content, 
-                current_signature.as_deref(), 
-                output_base
+                &temp_config,
+                &file_path,
+                &current_content,
+                current_signature.as_deref(),
+                output_base,
             )?;
         } else {
             process_extracted_file(
-                config, 
-                &file_path, 
-                &current_content, 
-                current_signature.as_deref(), 
-                output_base
+                config,
+                &file_path,
+                &current_content,
+                current_signature.as_deref(),
+                output_base,
             )?;
         }
         files_extracted += 1;
     }
-    
+
     if files_extracted == 0 {
         return Err("No files were extracted from the input file".to_string());
     }
-    
+
     info!("Successfully extracted {} files", files_extracted);
     Ok(())
 }
@@ -953,12 +1056,16 @@ fn parse_file_header(line: &str) -> Result<(String, Option<String>), String> {
     let trimmed_line = line.trim();
 
     // Ensure it starts with '''--- and ends with --- or ]
-    if !trimmed_line.starts_with("'''--- ") || !(trimmed_line.ends_with(" ---") || trimmed_line.ends_with(']')) {
+    if !trimmed_line.starts_with("'''--- ")
+        || !(trimmed_line.ends_with(" ---") || trimmed_line.ends_with(']'))
+    {
         return Err(format!("Invalid file header format: {}", line));
     }
 
     // Strip prefix '''---
-    let content = trimmed_line.strip_prefix("'''--- ").ok_or_else(|| format!("Failed to strip prefix: {}", line))?;
+    let content = trimmed_line
+        .strip_prefix("'''--- ")
+        .ok_or_else(|| format!("Failed to strip prefix: {}", line))?;
 
     // Check for signature: path --- [SIGNATURE:...]
     if let Some((path_part, sig_part)) = content.rsplit_once(" --- [SIGNATURE:") {
@@ -976,9 +1083,8 @@ fn parse_file_header(line: &str) -> Result<(String, Option<String>), String> {
     }
     // Check for public key header (should not be parsed here ideally)
     else if content.starts_with("PUBLIC_KEY --- [KEY:") {
-         Err("Public key header should be handled separately".to_string())
-    }
-    else {
+        Err("Public key header should be handled separately".to_string())
+    } else {
         Err(format!("Unrecognized file header format: {}", line))
     }
 }
@@ -989,7 +1095,7 @@ fn process_extracted_file(
     file_path: &str,
     content: &[String],
     signature: Option<&str>,
-    output_base: &Path
+    output_base: &Path,
 ) -> Result<(), String> {
     // Use Path::strip_prefix for safer and more robust path manipulation
     let relative_path = Path::new(file_path)
@@ -1012,20 +1118,32 @@ fn process_extracted_file(
                 log_signature_debug_info("Verifying", file_path, content_bytes);
 
                 if let Err(e) = verify_signature(
-                    config.public_key.as_ref().expect("Public key missing during verification"), // Use expect here
+                    config
+                        .public_key
+                        .as_ref()
+                        .expect("Public key missing during verification"), // Use expect here
                     content_bytes,
-                    sig
+                    sig,
                 ) {
                     if config.verbose {
-                        return Err(format!("Signature verification failed for {}: {}. Signature: {}", file_path, e, sig));
+                        return Err(format!(
+                            "Signature verification failed for {}: {}. Signature: {}",
+                            file_path, e, sig
+                        ));
                     } else {
-                        return Err(format!("Signature verification failed for {}: {}", file_path, e));
+                        return Err(format!(
+                            "Signature verification failed for {}: {}",
+                            file_path, e
+                        ));
                     }
                 }
                 debug!("Signature verified for: {}", file_path);
-            },
+            }
             None => {
-                warn!("File {} has no signature but signature verification is enabled", file_path);
+                warn!(
+                    "File {} has no signature but signature verification is enabled",
+                    file_path
+                );
             }
         }
     }
@@ -1043,19 +1161,19 @@ fn write_extracted_file(file_path: &Path, content: &[String]) -> io::Result<()> 
     }
 
     let mut file = File::create(file_path)?;
-    
+
     // Join all lines with a single newline and write at once
     // This preserves the exact format of the original file
     if !content.is_empty() {
         let joined_content = content.join("\n");
         file.write_all(joined_content.as_bytes())?;
-        
+
         // Add a final newline if the content doesn't end with one
         if !joined_content.ends_with('\n') {
             file.write_all(b"\n")?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -1104,7 +1222,7 @@ fn main() -> Result<(), String> {
         )
         .arg(
             Arg::with_name("name_pattern")
-                .long("pattern")  // Changed from "name" to "pattern" to avoid conflict
+                .long("pattern") // Changed from "name" to "pattern" to avoid conflict
                 .short('N')
                 .value_name("PATTERN")
                 .help("Filter files by name pattern (glob syntax, e.g., '*.c')")
@@ -1123,10 +1241,13 @@ fn main() -> Result<(), String> {
                 .short('s')
                 .long("size")
                 .value_name("SIZE_MB")
-                .help(format!(
-                    "Maximum file size in MB (default: {})",
-                    DEFAULT_MAX_FILE_SIZE / (1024 * 1024)
-                ).as_str())
+                .help(
+                    format!(
+                        "Maximum file size in MB (default: {})",
+                        DEFAULT_MAX_FILE_SIZE / (1024 * 1024)
+                    )
+                    .as_str(),
+                )
                 .takes_value(true),
         )
         .arg(
@@ -1147,7 +1268,7 @@ fn main() -> Result<(), String> {
                 .long("unglob")
                 .value_name("FILE")
                 .help("Extract files from a previously generated LLM Globber output file")
-                .takes_value(true)
+                .takes_value(true),
         )
         .arg(
             Arg::with_name("abort_on_error")
@@ -1173,11 +1294,9 @@ fn main() -> Result<(), String> {
                 .long("help")
                 .help("Show this help message"),
         )
-        .arg(
-            Arg::with_name("signature")
-                .long("signature")
-                .help("Add ed25519 signatures to files when globbing and verify signatures when unglobbing"),
-        )
+        .arg(Arg::with_name("signature").long("signature").help(
+            "Add ed25519 signatures to files when globbing and verify signatures when unglobbing",
+        ))
         .arg(
             Arg::with_name("git_repo")
                 .long("git")
@@ -1201,45 +1320,48 @@ fn main() -> Result<(), String> {
     }
 
     let mut config = ScrapeConfig::default();
-    
+
     // Handle git repository option
     if let Some(git_path) = matches.value_of("git_repo") {
         // Verify this is a git repository
         if !is_git_repository(git_path) {
             return Err(format!("Error: {} is not a git repository", git_path));
         }
-        
+
         // Set git repo path
         config.git_repo_path = Some(git_path.to_string());
-        
+
         // Set output path to current directory if not specified
         let output_path = matches.value_of("output_path").unwrap_or(".");
         config.output_path = sanitize_path(output_path)
             .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
-        
+
         // Get repository name and branch for output filename
         let repo_name = get_git_repo_name(git_path)?;
         let branch_name = get_git_branch(git_path)?;
         config.output_filename = format!("{}_{}", repo_name, branch_name);
-        
+
         // Enable recursion
         config.recursive = true;
-        
+
         info!("Processing git repository: {}", git_path);
         info!("Repository: {}, Branch: {}", repo_name, branch_name);
-        info!("Output will be: {}/{}.txt", config.output_path, config.output_filename);
+        info!(
+            "Output will be: {}/{}.txt",
+            config.output_path, config.output_filename
+        );
     } else if let Some(unglob_file) = matches.value_of("unglob") {
         // Unglob mode - output path and filename are optional
         config.unglob_mode = true;
         config.unglob_input_file = unglob_file.to_string();
-        
+
         if let Some(output_path) = matches.value_of("output_path") {
             config.output_path = sanitize_path(output_path)
                 .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
         } else {
             config.output_path = ".".to_string(); // Default to current directory
         }
-        
+
         if let Some(output_filename) = matches.value_of("output_name") {
             config.output_filename = output_filename.to_string();
         }
@@ -1251,7 +1373,7 @@ fn main() -> Result<(), String> {
         let output_filename = matches
             .value_of("output_name")
             .ok_or("Error: Output filename (-n) is required when not using --git or --unglob")?;
-            
+
         config.output_path = sanitize_path(output_path)
             .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
         config.output_filename = output_filename.to_string();
@@ -1297,18 +1419,21 @@ fn main() -> Result<(), String> {
     if matches.is_present("abort_on_error") {
         config.abort_on_error = true;
     }
-    
+
     if matches.is_present("signature") {
         config.use_signature = true;
-            
+
         if !config.unglob_mode {
             // Generate a new keypair for signing
             let keypair = generate_keypair();
             let public_key = keypair.public;
-                
+
             info!("Generated ed25519 keypair for signing");
-            info!("Public key: {}", general_purpose::STANDARD.encode(public_key.to_bytes()));
-                
+            info!(
+                "Public key: {}",
+                general_purpose::STANDARD.encode(public_key.to_bytes())
+            );
+
             config.keypair = Some(keypair);
             config.public_key = Some(public_key);
         } else {
@@ -1323,20 +1448,23 @@ fn main() -> Result<(), String> {
     }
 
     let mut found_input = false;
-    
+
     // Process git repository if specified
     if let Some(git_path) = &config.git_repo_path {
         found_input = true;
-        
+
         // Get all tracked files in the git repository
         let git_files = get_git_tracked_files(git_path)?;
-        
+
         if git_files.is_empty() {
-            return Err(format!("Error: No tracked files found in git repository: {}", git_path));
+            return Err(format!(
+                "Error: No tracked files found in git repository: {}",
+                git_path
+            ));
         }
-        
+
         info!("Found {} tracked files in git repository", git_files.len());
-        
+
         // Add all git tracked files to the file entries
         for file_path in git_files {
             let path = Path::new(&file_path);
@@ -1350,20 +1478,24 @@ fn main() -> Result<(), String> {
     } else if let Some(input_paths) = matches.values_of("input_paths") {
         // Standard mode - process specified input paths
         let input_paths: Vec<&str> = input_paths.collect();
-        
+
         for input_path_str in input_paths {
             found_input = true;
             let input_path = PathBuf::from(input_path_str);
 
             if !input_path.exists() {
-                warn!("Could not access path {}: Path does not exist", input_path_str);
+                warn!(
+                    "Could not access path {}: Path does not exist",
+                    input_path_str
+                );
                 continue;
             }
 
             if input_path.is_dir() {
                 if config.recursive {
-                    process_directory(&mut config, &input_path_str)
-                        .map_err(|e| format!("Error processing directory {}: {}", input_path_str, e))?;
+                    process_directory(&mut config, &input_path_str).map_err(|e| {
+                        format!("Error processing directory {}: {}", input_path_str, e)
+                    })?;
                 } else {
                     warn!(
                         "{} is a directory. Use -r to process recursively.",
@@ -1371,7 +1503,14 @@ fn main() -> Result<(), String> {
                     );
                 }
             } else if input_path.is_file() {
-                if should_process_file(&config, &input_path_str, input_path.file_name().and_then(|s| s.to_str()).unwrap_or("")) {
+                if should_process_file(
+                    &config,
+                    &input_path_str,
+                    input_path
+                        .file_name()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or(""),
+                ) {
                     add_file_entry(&mut config, &input_path_str);
                 }
             }
@@ -1407,19 +1546,22 @@ fn main() -> Result<(), String> {
 }
 // Generate a new keypair for signing
 fn generate_keypair() -> Keypair {
-    let mut csprng = OsRng{};
+    let mut csprng = OsRng {};
     Keypair::generate(&mut csprng)
 }
 
 // Sign data with the keypair
 fn sign_data(keypair: &Keypair, data: &[u8]) -> String {
     debug!("Signing data of length: {} bytes", data.len());
-    
+
     // Log a sample of the data being signed (first 100 bytes or less)
     let sample_len = std::cmp::min(data.len(), 100);
     let data_sample = String::from_utf8_lossy(&data[0..sample_len]);
-    debug!("Data sample (first {} bytes): {:?}", sample_len, data_sample);
-    
+    debug!(
+        "Data sample (first {} bytes): {:?}",
+        sample_len, data_sample
+    );
+
     let signature = keypair.sign(data);
     let encoded = general_purpose::STANDARD.encode(signature.to_bytes());
     debug!("Generated signature: {}", encoded);
@@ -1427,32 +1569,43 @@ fn sign_data(keypair: &Keypair, data: &[u8]) -> String {
 }
 
 // Verify a signature
-fn verify_signature(public_key: &PublicKey, data: &[u8], signature_str: &str) -> Result<(), String> {
+fn verify_signature(
+    public_key: &PublicKey,
+    data: &[u8],
+    signature_str: &str,
+) -> Result<(), String> {
     debug!("Verifying signature: {}", signature_str);
     debug!("Data length: {} bytes", data.len());
-    
+
     // Log a sample of the data being verified (first 100 bytes or less)
     let sample_len = std::cmp::min(data.len(), 100);
     let data_sample = String::from_utf8_lossy(&data[0..sample_len]);
-    debug!("Data sample (first {} bytes): {:?}", sample_len, data_sample);
-    
-    let signature_bytes = general_purpose::STANDARD.decode(signature_str)
+    debug!(
+        "Data sample (first {} bytes): {:?}",
+        sample_len, data_sample
+    );
+
+    let signature_bytes = general_purpose::STANDARD
+        .decode(signature_str)
         .map_err(|e| format!("Invalid signature encoding: {}", e))?;
-    
+
     if signature_bytes.len() != ed25519_dalek::SIGNATURE_LENGTH {
-        return Err(format!("Invalid signature length: {}", signature_bytes.len()));
+        return Err(format!(
+            "Invalid signature length: {}",
+            signature_bytes.len()
+        ));
     }
-    
+
     debug!("Decoded signature length: {} bytes", signature_bytes.len());
-    
-    let signature = Signature::from_bytes(&signature_bytes)
-        .map_err(|e| format!("Invalid signature: {}", e))?;
-    
+
+    let signature =
+        Signature::from_bytes(&signature_bytes).map_err(|e| format!("Invalid signature: {}", e))?;
+
     match public_key.verify(data, &signature) {
         Ok(_) => {
             debug!("Signature verification successful");
             Ok(())
-        },
+        }
         Err(e) => {
             error!("Signature verification failed: {}", e);
             Err(format!("Signature verification failed: {}", e))
