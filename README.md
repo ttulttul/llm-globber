@@ -247,8 +247,7 @@ The project includes a test suite located in the `tests/` directory. The tests a
 To run the full test suite:
 
 ```bash
-cd tests
-./test_llm_globber.sh
+make tests
 ```
 
 This script will execute individual test files (e.g., `test_basic.sh`, `test_recursive.sh`, `test_signature.sh`, etc.) and report a summary of the results.
