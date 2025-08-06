@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use clap::{App, Arg};
+use colored::*;
 use std::collections::HashSet;
 
 use base64::{engine::general_purpose, Engine};
@@ -122,10 +123,17 @@ impl Log for GlobalLogger {
             if *self.quiet_mode.lock().expect("Quiet mode mutex poisoned") {
                 return;
             }
+            let level_str = match record.level() {
+                log::Level::Error => "ERROR".red(),
+                log::Level::Warn => "WARN".yellow(),
+                log::Level::Info => "INFO".green(),
+                log::Level::Debug => "DEBUG".blue(),
+                log::Level::Trace => "TRACE".cyan(),
+            };
             eprintln!(
                 "[{}] {}: {}",
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S"),
-                record.level(),
+                chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string().dimmed(),
+                level_str,
                 record.args()
             );
         }
@@ -363,15 +371,16 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
         print_header("Processing Complete");
     }
     info!(
-        "Done. Processed {} files in {:.2} seconds ({:.1} files/sec). Output: {}",
-        files_processed,
+        "{} Done. Processed {} files in {:.2} seconds ({:.1} files/sec). Output: {}",
+        "✅".green(),
+        files_processed.to_string().green(),
         elapsed,
         files_processed as f64 / elapsed,
-        output_file_path_str
+        output_file_path_str.cyan()
     );
 
     if config.failed_files > 0 {
-        warn!("Failed to process {} files", config.failed_files);
+        warn!("{} Failed to process {} files", "❗".yellow(), config.failed_files.to_string().red());
     }
 
     Ok(output_file_path_str)
@@ -422,9 +431,9 @@ fn parse_file_types(config: &mut ScrapeConfig, types_str: &str) {
 }
 
 fn print_usage(program_name: &str) {
-    println!("LLM Globber - A tool for collecting and formatting files for LLMs\n");
-    println!("Usage: {} [options] [files/directories...]", program_name);
-    println!("Options:");
+    println!("{}", "LLM Globber - A tool for collecting and formatting files for LLMs\n".bold());
+    println!("{} {} [options] [files/directories...]", "Usage:".yellow(), program_name.cyan());
+    println!("\n{}", "Options:".yellow());
     println!("  -o PATH        Output directory path");
     println!("  -n NAME        Output filename (without extension) - not required with --git or --unglob");
     println!("  -t TYPES       File types to include (comma separated, e.g. '.c,.h,.txt')");
@@ -762,12 +771,22 @@ fn print_progress(config: &ScrapeConfig) {
 
     let files_per_sec = config.processed_files as f64 / elapsed;
 
+    let processed_str = format!("{}", config.processed_files).green();
+    let total_str = format!("{}", config.file_entries.len()).cyan();
+    let files_per_sec_str = format!("{:.1}", files_per_sec).yellow();
+    let failed_str = if config.failed_files > 0 {
+        format!("{}", config.failed_files).red()
+    } else {
+        format!("{}", config.failed_files).green()
+    };
+
     eprint!(
-        "\rProcessed {}/{} files ({:.1} files/sec), {} failed",
-        config.processed_files,
-        config.file_entries.len(),
-        files_per_sec,
-        config.failed_files
+        "\r{} Processed {}/{} files ({} files/sec), {} failed",
+        "🔍".yellow(),
+        processed_str,
+        total_str,
+        files_per_sec_str,
+        failed_str
     );
     io::stderr().flush().unwrap();
 }
@@ -788,9 +807,9 @@ fn print_header(msg: &str) {
     }
     // Only print to stderr if we're not in quiet mode
     eprintln!();
-    eprintln!("{}", "=".repeat(80));
-    eprintln!("{}", msg);
-    eprintln!("{}", "=".repeat(80));
+    eprintln!("{}", "=".repeat(80).cyan());
+    eprintln!("{} {}", "🚀".magenta(), msg.bold().magenta());
+    eprintln!("{}", "=".repeat(80).cyan());
     eprintln!();
 }
 

@@ -11,6 +11,7 @@ log = "0.4"
 memmap2 = "0.5"
 simplelog = "0.12"
 chrono = "0.4"
+colored = "2.0.0"
 ed25519-dalek = "1.0"
 base64 = "0.21"
 rand = "0.7"  # Match the version expected by ed25519-dalek 1.0
