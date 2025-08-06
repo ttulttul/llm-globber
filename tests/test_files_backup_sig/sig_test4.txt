@@ -1,0 +1,1 @@
+This is a signature test file in a subdirectory
