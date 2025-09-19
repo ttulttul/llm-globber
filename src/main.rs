@@ -455,6 +455,7 @@ fn print_usage(program_name: &str) {
     );
     println!("  -e             Abort on errors (default is to continue)");
     println!("  -v             Verbose output");
+    println!("  --debug        Print a DEBUG DUMP of the generated output file (to stderr)");
     println!("  -q             Quiet mode (suppress all output)");
     println!("  -h             Show this help message");
     println!("  --signature    Add ed25519 signatures to files when globbing and verify signatures when unglobbing");
@@ -1376,6 +1377,11 @@ fn main() -> Result<(), String> {
                 .help("Verbose output"),
         )
         .arg(
+            Arg::with_name("debug")
+                .long("debug")
+                .help("Print a DEBUG DUMP of the generated output file to stderr"),
+        )
+        .arg(
             Arg::with_name("quiet")
                 .short('q')
                 .long("quiet")
@@ -1642,7 +1648,7 @@ fn main() -> Result<(), String> {
 
     let result = match run_scraper(&mut config) {
         Ok(output_file) => {
-            if matches.is_present("verbose") {
+            if matches.is_present("debug") {
                 debug_dump_file(&output_file).map_err(|e| format!("Debug dump failed: {}", e))?;
             }
             info!("Scraper completed successfully: {}", output_file);
