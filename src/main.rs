@@ -200,6 +200,7 @@ struct ScrapeConfig {
     use_signature: bool,
     keypair: Option<Keypair>,
     public_key: Option<PublicKey>,
+    temp_git_path: Option<String>, // Path to temporary git clone that needs cleanup
 }
 
 // Implement a custom clone method that doesn't clone the non-cloneable fields
@@ -231,6 +232,7 @@ impl ScrapeConfig {
             use_signature: self.use_signature,
             keypair: None, // Don't clone the keypair
             public_key: new_public_key,
+            temp_git_path: self.temp_git_path.clone(),
         }
     }
 }
@@ -263,6 +265,7 @@ impl Default for ScrapeConfig {
             use_signature: false,
             keypair: None,
             public_key: None,
+            temp_git_path: None,
         }
     }
 }
@@ -455,7 +458,7 @@ fn print_usage(program_name: &str) {
     println!("  -q             Quiet mode (suppress all output)");
     println!("  -h             Show this help message");
     println!("  --signature    Add ed25519 signatures to files when globbing and verify signatures when unglobbing");
-    println!("  --git PATH     Process a git repository (auto-configures path, name, and files)");
+    println!("  --git PATH/URL Process a git repository from local path or clone from URL (auto-configures path, name, and files)");
 }
 
 fn process_directory(config: &mut ScrapeConfig, dir_path: &str) -> Result<(), String> {
@@ -905,6 +908,77 @@ fn is_git_repository(path: &str) -> bool {
     }
 }
 
+fn is_git_url(url: &str) -> bool {
+    url.starts_with("http://") || 
+    url.starts_with("https://") || 
+    url.starts_with("git://") || 
+    url.starts_with("ssh://") ||
+    url.starts_with("git@")
+}
+
+fn clone_git_repository(url: &str) -> Result<String, String> {
+    use std::env;
+    
+    // Create a temporary directory for cloning
+    let temp_dir = env::temp_dir().join(format!("llm_globber_clone_{}", 
+        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+    
+    info!("Cloning {} to temporary directory: {}", url, temp_dir.display());
+    
+    // Execute git clone command
+    let output = Command::new("git")
+        .args(&["clone", "--depth", "1", url, temp_dir.to_str().unwrap()])
+        .output()
+        .map_err(|e| format!("Failed to execute git clone: {}", e))?;
+    
+    if !output.status.success() {
+        let error_msg = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("Git clone failed: {}", error_msg));
+    }
+    
+    info!("Successfully cloned repository to {}", temp_dir.display());
+    Ok(temp_dir.to_string_lossy().to_string())
+}
+
+fn get_repo_name_from_url(url: &str) -> String {
+    // Handle SSH URLs like git@github.com:user/repo.git
+    if let Some(ssh_part) = url.strip_prefix("git@") {
+        if let Some(repo_part) = ssh_part.split(':').nth(1) {
+            if let Some(repo_name) = repo_part.split('/').last() {
+                return repo_name.trim_end_matches(".git").to_string();
+            }
+        }
+    }
+    
+    // Extract repository name from HTTP/HTTPS URL
+    if let Some(last_part) = url.split('/').last() {
+        return last_part.trim_end_matches(".git").to_string();
+    }
+    
+    "unknown_repo".to_string()
+}
+
+fn cleanup_temp_directory(path: &str) -> Result<(), String> {
+    // Only clean up directories in temp directory to be safe
+    if !path.contains("llm_globber_clone_") {
+        return Ok(());
+    }
+    
+    info!("Cleaning up temporary directory: {}", path);
+    fs::remove_dir_all(path)
+        .map_err(|e| format!("Failed to cleanup temporary directory {}: {}", path, e))?;
+    info!("Successfully cleaned up temporary directory");
+    Ok(())
+}
+
+fn cleanup_config_temp_dirs(config: &ScrapeConfig) {
+    if let Some(temp_path) = &config.temp_git_path {
+        if let Err(cleanup_err) = cleanup_temp_directory(temp_path) {
+            warn!("Failed to cleanup temporary directory: {}", cleanup_err);
+        }
+    }
+}
+
 fn unglob_file(config: &ScrapeConfig) -> Result<(), String> {
     info!("Unglobbing file: {}", config.unglob_input_file);
 
@@ -1319,8 +1393,8 @@ fn main() -> Result<(), String> {
         .arg(
             Arg::with_name("git_repo")
                 .long("git")
-                .value_name("PATH")
-                .help("Process a git repository (auto-configures path, name, and files)")
+                .value_name("PATH/URL")
+                .help("Process a git repository from local path or clone from URL (auto-configures path, name, and files)")
                 .takes_value(true),
         )
         .arg(
@@ -1341,14 +1415,23 @@ fn main() -> Result<(), String> {
     let mut config = ScrapeConfig::default();
 
     // Handle git repository option
-    if let Some(git_path) = matches.value_of("git_repo") {
-        // Verify this is a git repository
-        if !is_git_repository(git_path) {
-            return Err(format!("Error: {} is not a git repository", git_path));
-        }
+    if let Some(git_input) = matches.value_of("git_repo") {
+        let actual_git_path = if is_git_url(git_input) {
+            // Clone the repository from URL
+            info!("Detected git URL: {}", git_input);
+            let cloned_path = clone_git_repository(git_input)?;
+            config.temp_git_path = Some(cloned_path.clone());
+            cloned_path
+        } else {
+            // Local path - verify this is a git repository
+            if !is_git_repository(git_input) {
+                return Err(format!("Error: {} is not a git repository", git_input));
+            }
+            git_input.to_string()
+        };
 
         // Set git repo path
-        config.git_repo_path = Some(git_path.to_string());
+        config.git_repo_path = Some(actual_git_path.clone());
 
         // Set output path to current directory if not specified
         let output_path = matches.value_of("output_path").unwrap_or(".");
@@ -1356,14 +1439,18 @@ fn main() -> Result<(), String> {
             .map_err(|e| format!("Invalid output path: {}: {}", output_path, e))?;
 
         // Get repository name and branch for output filename
-        let repo_name = get_git_repo_name(git_path)?;
-        let branch_name = get_git_branch(git_path)?;
+        let repo_name = if is_git_url(git_input) {
+            get_repo_name_from_url(git_input)
+        } else {
+            get_git_repo_name(&actual_git_path)?
+        };
+        let branch_name = get_git_branch(&actual_git_path)?;
         config.output_filename = format!("{}_{}", repo_name, branch_name);
 
         // Enable recursion
         config.recursive = true;
 
-        info!("Processing git repository: {}", git_path);
+        info!("Processing git repository: {}", actual_git_path);
         info!("Repository: {}, Branch: {}", repo_name, branch_name);
         info!(
             "Output will be: {}/{}.txt",
@@ -1538,18 +1625,22 @@ fn main() -> Result<(), String> {
 
     // If we're in unglob mode, process the input file
     if config.unglob_mode {
-        return unglob_file(&config);
+        let result = unglob_file(&config);
+        cleanup_config_temp_dirs(&config);
+        return result;
     }
 
     if !found_input {
+        cleanup_config_temp_dirs(&config);
         return Err("Error: No input files or directories specified".to_string());
     }
 
     if config.file_entries.is_empty() {
+        cleanup_config_temp_dirs(&config);
         return Err("Error: No files found matching criteria".to_string());
     }
 
-    match run_scraper(&mut config) {
+    let result = match run_scraper(&mut config) {
         Ok(output_file) => {
             if matches.is_present("verbose") {
                 debug_dump_file(&output_file).map_err(|e| format!("Debug dump failed: {}", e))?;
@@ -1561,7 +1652,12 @@ fn main() -> Result<(), String> {
             error!("Scraper failed: {}", err);
             Err(err)
         }
-    }
+    };
+
+    // Cleanup temporary git directory if needed
+    cleanup_config_temp_dirs(&config);
+
+    result
 }
 // Generate a new keypair for signing
 fn generate_keypair() -> Keypair {

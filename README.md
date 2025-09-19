@@ -80,7 +80,7 @@ OPTIONS:
     -v, --verbose              Verbose output
     -V, --version              Print version information
     --signature                Add ed25519 signatures to files when globbing and verify signatures when unglobbing
-    --git <PATH>               Process a git repository (auto-configures path, name, and files)
+    --git <PATH|URL>           Process a git repository (auto-configures path, name, and files)
 ```
 
 ### Examples
@@ -112,16 +112,18 @@ llm_globber -o output -n dotfile_run -d -r /path/to/config_dir
 
 # Process a git repository (automatically uses tracked files)
 llm_globber --git /path/to/repo -o output
+llm_globber --git https://github.com/ttulttul/llm-globber -o output
 ```
 
 ### Git Integration
 
 When using the `--git` option, LLM Globber automatically:
 
-1. Verifies the path is a valid git repository
-2. Uses the repository name and branch for the output filename
-3. Processes only tracked files in the repository
-4. Maintains the repository's directory structure in the output
+1. Downloads the git repository if a URL was provided
+2. Verifies the path is a valid git repository
+3. Uses the repository name and branch for the output filename
+4. Processes only tracked files in the repository
+5. Maintains the repository's directory structure in the output
 
 This is especially useful for preparing codebases for LLM analysis:
 
@@ -134,6 +136,9 @@ llm_globber --git /path/to/repo -o output -t .py,.js,.html
 
 # Process a git repository with verbose output
 llm_globber --git /path/to/repo -o output -v
+
+# Download a git repository
+llm_globber --git https://github.com/ttulttul/llm-globber -o output
 ```
 
 ## Unglob Mode
