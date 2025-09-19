@@ -185,6 +185,7 @@ struct ScrapeConfig {
     name_pattern: String,
     verbose: bool,
     quiet: bool,
+    debug_mode: bool,
     no_dot_files: bool,
     max_file_size: u64,
     output_file: Option<BufWriter<File>>, // Using BufWriter for efficiency
@@ -217,6 +218,7 @@ impl ScrapeConfig {
             name_pattern: self.name_pattern.clone(),
             verbose: self.verbose,
             quiet: self.quiet,
+            debug_mode: self.debug_mode,
             no_dot_files: self.no_dot_files,
             max_file_size: self.max_file_size,
             output_file: None, // Don't clone the file handle
@@ -250,6 +252,7 @@ impl Default for ScrapeConfig {
             name_pattern: String::new(),
             verbose: false,
             quiet: false,
+            debug_mode: false,
             no_dot_files: true,
             max_file_size: DEFAULT_MAX_FILE_SIZE,
             output_file: None,
@@ -737,7 +740,9 @@ fn process_file(config: &mut ScrapeConfig, file_path: &str) -> io::Result<()> {
     }
 
     let file_size = get_file_size(file_path)?;
-    debug!("Processing file {}: size {} bytes", file_path, file_size);
+    if config.debug_mode {
+        debug!("Processing file {}: size {} bytes", file_path, file_size);
+    }
 
     if file_size >= 1024 * 1024 {
         return process_file_mmap(config, file_path, file_size);
@@ -1526,6 +1531,10 @@ fn main() -> Result<(), String> {
     }
     if matches.is_present("verbose") {
         config.verbose = true;
+        set_log_level(LogLevel::Debug);
+    }
+    if matches.is_present("debug") {
+        config.debug_mode = true;
         set_log_level(LogLevel::Debug);
     }
     if matches.is_present("abort_on_error") {
