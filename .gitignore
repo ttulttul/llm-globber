@@ -68,3 +68,4 @@ llm_globber_c
 tests/output/
 tests/test_files/
 tests/test_output/
+tests/skip_test_files/

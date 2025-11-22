@@ -11,6 +11,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Collect Files:** Gathers files from specified directories and file paths.
 - **File Type Filtering:** Includes or excludes files based on comma-separated file type extensions (e.g., `.c,.h,.txt`).
 - **Name Pattern Filtering:** Filters files based on glob patterns in their names (e.g., `*.config*`).
+- **Skip Pattern Filtering:** Excludes files that match configurable glob patterns (e.g., `*.log`).
 - **Recursive Directory Processing:** Traverses directories recursively to find files.
 - **Binary File Handling:** Detects binary files and omits their content from the output, noting them as binary.
 - **Dot File Handling:** Option to include or exclude dot files (hidden files).
@@ -71,6 +72,8 @@ OPTIONS:
     -j, --threads <THREADS>    [Deprecated] Number of worker threads (always 1)
     -n, --name <NAME>          Output filename (without extension) - not required with --git
     -N, --pattern <PATTERN>    Filter files by name pattern (glob syntax, e.g., '*.c')
+        --skip-pattern <PATTERN>
+                              Skip files matching glob pattern (repeatable)
     -o, --output <PATH>        Output directory path
     -p, --progress             Show progress indicators (disabled by default)
     -q, --quiet                Quiet mode (suppress all output)
@@ -94,6 +97,9 @@ llm_globber -o output -n project_files -a -r /path/to/project
 
 # Process only files that match a specific pattern
 llm_globber -o output -n config_files -N "*config*" /path/to/project
+
+# Process files but exclude temporary outputs
+llm_globber -o output -n filtered_files -r /path/to/project --skip-pattern "*.log" --skip-pattern "*.tmp"
 
 # Process specific files
 llm_globber -o output -n important_files file1.c file2.h file3.txt

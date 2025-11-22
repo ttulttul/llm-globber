@@ -132,7 +132,10 @@ impl Log for GlobalLogger {
             };
             eprintln!(
                 "[{}] {}: {}",
-                chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string().dimmed(),
+                chrono::Local::now()
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string()
+                    .dimmed(),
                 level_str,
                 record.args()
             );
@@ -183,6 +186,7 @@ struct ScrapeConfig {
     filter_files: bool,
     recursive: bool,
     name_pattern: String,
+    skip_patterns: Vec<Pattern>,
     verbose: bool,
     quiet: bool,
     debug_mode: bool,
@@ -216,6 +220,7 @@ impl ScrapeConfig {
             filter_files: self.filter_files,
             recursive: self.recursive,
             name_pattern: self.name_pattern.clone(),
+            skip_patterns: self.skip_patterns.clone(),
             verbose: self.verbose,
             quiet: self.quiet,
             debug_mode: self.debug_mode,
@@ -250,6 +255,7 @@ impl Default for ScrapeConfig {
             filter_files: true,
             recursive: false,
             name_pattern: String::new(),
+            skip_patterns: Vec::new(),
             verbose: false,
             quiet: false,
             debug_mode: false,
@@ -386,7 +392,11 @@ fn run_scraper(config: &mut ScrapeConfig) -> Result<String, String> {
     );
 
     if config.failed_files > 0 {
-        warn!("{} Failed to process {} files", "❗".yellow(), config.failed_files.to_string().red());
+        warn!(
+            "{} Failed to process {} files",
+            "❗".yellow(),
+            config.failed_files.to_string().red()
+        );
     }
 
     Ok(output_file_path_str)
@@ -437,8 +447,15 @@ fn parse_file_types(config: &mut ScrapeConfig, types_str: &str) {
 }
 
 fn print_usage(program_name: &str) {
-    println!("{}", "LLM Globber - A tool for collecting and formatting files for LLMs\n".bold());
-    println!("{} {} [options] [files/directories...]", "Usage:".yellow(), program_name.cyan());
+    println!(
+        "{}",
+        "LLM Globber - A tool for collecting and formatting files for LLMs\n".bold()
+    );
+    println!(
+        "{} {} [options] [files/directories...]",
+        "Usage:".yellow(),
+        program_name.cyan()
+    );
     println!("\n{}", "Options:".yellow());
     println!("  -o PATH        Output directory path");
     println!("  -n NAME        Output filename (without extension) - not required with --git or --unglob");
@@ -446,6 +463,7 @@ fn print_usage(program_name: &str) {
     println!("  -a             Include all files (no filtering by type)");
     println!("  -r             Recursively process directories");
     println!("  -N, --pattern PATTERN  Filter files by name pattern (glob syntax, e.g. '*.c')");
+    println!("      --skip-pattern PATTERN  Skip files matching glob pattern (repeatable)");
     println!("  -j THREADS     [Deprecated] Number of worker threads (always 1)");
     println!(
         "  -s SIZE        Maximum file size in MB (default: {})",
@@ -628,6 +646,16 @@ fn should_process_file(config: &ScrapeConfig, file_path: &str, base_name: &str) 
         } else {
             warn!("Including dot file: {}", file_path);
         }
+    }
+
+    if !config.skip_patterns.is_empty()
+        && config
+            .skip_patterns
+            .iter()
+            .any(|pattern| pattern.matches(base_name) || pattern.matches_path(Path::new(file_path)))
+    {
+        debug!("Skipping file '{}' due to skip pattern", file_path);
+        return false;
     }
 
     if let Ok(file_size) = get_file_size(file_path) {
@@ -915,33 +943,42 @@ fn is_git_repository(path: &str) -> bool {
 }
 
 fn is_git_url(url: &str) -> bool {
-    url.starts_with("http://") || 
-    url.starts_with("https://") || 
-    url.starts_with("git://") || 
-    url.starts_with("ssh://") ||
-    url.starts_with("git@")
+    url.starts_with("http://")
+        || url.starts_with("https://")
+        || url.starts_with("git://")
+        || url.starts_with("ssh://")
+        || url.starts_with("git@")
 }
 
 fn clone_git_repository(url: &str) -> Result<String, String> {
     use std::env;
-    
+
     // Create a temporary directory for cloning
-    let temp_dir = env::temp_dir().join(format!("llm_globber_clone_{}", 
-        SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
-    
-    info!("Cloning {} to temporary directory: {}", url, temp_dir.display());
-    
+    let temp_dir = env::temp_dir().join(format!(
+        "llm_globber_clone_{}",
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+
+    info!(
+        "Cloning {} to temporary directory: {}",
+        url,
+        temp_dir.display()
+    );
+
     // Execute git clone command
     let output = Command::new("git")
         .args(&["clone", "--depth", "1", url, temp_dir.to_str().unwrap()])
         .output()
         .map_err(|e| format!("Failed to execute git clone: {}", e))?;
-    
+
     if !output.status.success() {
         let error_msg = String::from_utf8_lossy(&output.stderr);
         return Err(format!("Git clone failed: {}", error_msg));
     }
-    
+
     info!("Successfully cloned repository to {}", temp_dir.display());
     Ok(temp_dir.to_string_lossy().to_string())
 }
@@ -955,12 +992,12 @@ fn get_repo_name_from_url(url: &str) -> String {
             }
         }
     }
-    
+
     // Extract repository name from HTTP/HTTPS URL
     if let Some(last_part) = url.split('/').last() {
         return last_part.trim_end_matches(".git").to_string();
     }
-    
+
     "unknown_repo".to_string()
 }
 
@@ -969,7 +1006,7 @@ fn cleanup_temp_directory(path: &str) -> Result<(), String> {
     if !path.contains("llm_globber_clone_") {
         return Ok(());
     }
-    
+
     info!("Cleaning up temporary directory: {}", path);
     fs::remove_dir_all(path)
         .map_err(|e| format!("Failed to cleanup temporary directory {}: {}", path, e))?;
@@ -1328,6 +1365,14 @@ fn main() -> Result<(), String> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("skip_pattern")
+                .long("skip-pattern")
+                .value_name("PATTERN")
+                .help("Skip files matching this glob pattern (can be used multiple times)")
+                .takes_value(true)
+                .multiple_occurrences(true),
+        )
+        .arg(
             Arg::with_name("threads")
                 .short('j')
                 .long("threads")
@@ -1507,6 +1552,16 @@ fn main() -> Result<(), String> {
     }
     if let Some(name_pattern) = matches.value_of("name_pattern") {
         config.name_pattern = name_pattern.to_string();
+    }
+    if let Some(skip_patterns) = matches.values_of("skip_pattern") {
+        for pattern_str in skip_patterns {
+            match Pattern::new(pattern_str) {
+                Ok(pattern) => config.skip_patterns.push(pattern),
+                Err(e) => {
+                    return Err(format!("Invalid skip pattern '{}': {}", pattern_str, e));
+                }
+            }
+        }
     }
     if matches.is_present("threads") {
         warn!("The -j option is deprecated and has no effect");
