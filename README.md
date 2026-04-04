@@ -1,6 +1,6 @@
 # LLM Globber
 
-LLM Globber is a command-line utility written in Rust for collecting files from various locations, filtering them, and outputting their contents to a single text file. This tool is designed to prepare local files for analysis by Language Learning Models (LLMs).
+LLM Globber is a command-line utility written in Rust for collecting files from various locations, filtering them, and outputting their contents to a single text file. This tool is designed to prepare local files for analysis by Large Language Models (LLMs).
 
 ## License
 
@@ -18,7 +18,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **File Size Limit:** Skips files exceeding a specified maximum size.
 - **Progress Indication:** Shows progress during file processing.
 - **Verbose and Quiet Modes:** Controls the verbosity of output logging.
-- **Error Handling:** Robust error handling with options to abort on error or continue.
+- **Error Reporting:** Reports inaccessible files and invalid inputs while continuing to process the remaining files.
 - **Output Cleanup:** Reduces excessive newlines in the output file for cleaner text.
 - **Secure File Handling:** Uses secure file permissions for output files and sanitizes input paths.
 - **Efficient I/O:** Employs buffered I/O and memory mapping for performance.
@@ -53,42 +53,45 @@ cargo install --path .
 
 ## Usage
 
+```text
+llm_globber [OPTIONS] [FILES/DIRECTORIES]...
+
+Options:
+  -a, --all                  Include all files (no filtering by type)
+  -d, --dot                  Include dot files (hidden files)
+  -e, --abort-on-error       Accepted by the CLI, but not currently enforced during per-file processing
+      --git <PATH|URL>       Process a git repository from a local path or clone from a URL
+  -h, --help                 Show this help message
+  -j, --threads <THREADS>    Deprecated; always runs single-threaded
+  -n, --name <NAME>          Output filename prefix; optional with --git and --unglob
+  -N, --pattern <PATTERN>    Filter files by name pattern (glob syntax, e.g. '*.c')
+      --skip-pattern <PATTERN>
+                             Skip files matching a glob pattern; repeat the flag for multiple patterns
+  -o, --output <PATH>        Output directory path; this directory must already exist
+  -p, --progress             Show progress indicators
+  -q, --quiet                Quiet mode (suppress all output)
+  -r, --recursive            Recursively process directories
+  -s, --size <SIZE_MB>       Maximum file size in MB (default: 1024)
+      --debug                Print a DEBUG DUMP of the generated output file to stderr
+      --signature            Add ed25519 signatures when globbing and verify them when unglobbing
+  -t, --types <TYPES>        File types to include (comma separated, e.g. '.c,.h,.txt')
+  -u, --unglob <FILE>        Extract files from a previously generated LLM Globber output file
+  -v, --verbose              Verbose output
+  -V, --version              Print version information
 ```
-llm_globber 0.1.0
-Ken Simpson
-Collects and formats files for LLMs
 
-USAGE:
-    llm_globber [OPTIONS] <FILES/DIRECTORIES>...
+Notes:
 
-ARGS:
-    <FILES/DIRECTORIES>...    Files or directories to process
-
-OPTIONS:
-    -a, --all                  Include all files (no filtering by type)
-    -d, --dot                  Include dot files (hidden files)
-    -e, --abort-on-error       Abort on errors (default is to continue)
-    -h, --help                 Show this help message
-    -j, --threads <THREADS>    [Deprecated] Number of worker threads (always 1)
-    -n, --name <NAME>          Output filename (without extension) - not required with --git
-    -N, --pattern <PATTERN>    Filter files by name pattern (glob syntax, e.g., '*.c')
-        --skip-pattern <PATTERN>
-                              Skip files matching glob pattern (repeatable)
-    -o, --output <PATH>        Output directory path
-    -p, --progress             Show progress indicators (disabled by default)
-    -q, --quiet                Quiet mode (suppress all output)
-    -r, --recursive            Recursively process directories
-    -s, --size <SIZE_MB>       Maximum file size in MB (default: 1024)
-    -t, --types <TYPES>        File types to include (comma separated, e.g., '.c,.h,.txt')
-    -v, --verbose              Verbose output
-    -V, --version              Print version information
-    --signature                Add ed25519 signatures to files when globbing and verify signatures when unglobbing
-    --git <PATH|URL>           Process a git repository (auto-configures path, name, and files)
-```
+- Create the output directory before running the tool, for example `mkdir -p output`.
+- If you omit `-o` while using `--unglob`, files are extracted into the current directory.
+- `--abort-on-error` is exposed in the CLI help, but the current implementation still continues past per-file processing errors.
 
 ### Examples
 
 ```bash
+# Create the output directory first
+mkdir -p output
+
 # Process all C source files in the current directory
 llm_globber -o output -n c_sources -t .c .
 
@@ -110,9 +113,6 @@ llm_globber -o output -n debug_files -v -r /path/to/project
 # Process files silently (no output)
 llm_globber -o output -n silent_run -q -r /path/to/project
 
-# Abort on error
-llm_globber -o output -n strict_run -e -r /path/to/project
-
 # Include dot files
 llm_globber -o output -n dotfile_run -d -r /path/to/config_dir
 
@@ -125,7 +125,7 @@ llm_globber --git https://github.com/ttulttul/llm-globber -o output
 
 When using the `--git` option, LLM Globber automatically:
 
-1. Downloads the git repository if a URL was provided
+1. Clones the git repository into a temporary directory if a URL was provided
 2. Verifies the path is a valid git repository
 3. Uses the repository name and branch for the output filename
 4. Processes only tracked files in the repository
@@ -152,6 +152,9 @@ llm_globber --git https://github.com/ttulttul/llm-globber -o output
 LLM Globber can extract files from a previously generated output file using the `--unglob` option:
 
 ```bash
+# Create the destination directory first
+mkdir -p extracted_files
+
 # Extract files from a globbed file
 llm_globber -u globbed_file.txt -o extracted_files
 
@@ -164,6 +167,7 @@ This is useful for:
 - Extracting specific files from a large collection
 - Restoring files from a backup
 - Securely sharing files with tamper protection (when using `--signature`)
+
 ## Safety Features
 
 - **Memory Safety:** Implemented in Rust, ensuring memory safety and preventing common vulnerabilities like buffer overflows.
@@ -201,10 +205,14 @@ LLM Globber includes an optional cryptographic signature system to ensure file i
 ### Usage Examples
 
 ```bash
+# Create the output directory first
+mkdir -p output
+
 # Create a globbed file with signatures
 llm_globber -o output -n secure_code --signature -r /path/to/code
 
 # Extract files with signature verification
+mkdir -p extracted
 llm_globber -u output/secure_code_1234567890.txt -o extracted --signature
 ```
 
@@ -258,10 +266,10 @@ The project includes a test suite located in the `tests/` directory. The tests a
 To run the full test suite:
 
 ```bash
-make tests
+make test
 ```
 
-This script will execute individual test files (e.g., `test_basic.sh`, `test_recursive.sh`, `test_signature.sh`, etc.) and report a summary of the results.
+This target runs the Rust unit tests and the legacy Bash test suite (e.g., `test_basic.sh`, `test_recursive.sh`, `test_signature.sh`) and reports a summary of the results. If you only want the Rust unit tests, run `cargo test`.
 
 The test suite covers various functionalities, including:
 - Basic file globbing
